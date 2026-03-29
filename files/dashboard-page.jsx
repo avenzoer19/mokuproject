@@ -14,7 +14,7 @@ export default function DashboardHome() {
   const [msg, setMsg] = useState(`Hai ${displayName}! Mau belajar apa hari ini? 📖`);
   const msgs = [
     `Hai ${displayName}! Mau belajar apa hari ini? 📖`,
-    "Aku lapar nih... feed aku ilmu dong! 🍕",
+    "Buruan belajar, aku laper nih!🥺",
     "Kamu belum study session hari ini lho~ 🧘",
     "Ada modul baru? Upload yuk! 📚",
     "Jangan lupa istirahat juga ya~ ☕",

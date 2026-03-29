@@ -104,7 +104,7 @@ export default function AboutPage() {
           <div style={{ background: t.card, border: `1.5px solid ${t.border}`, borderRadius: 20, padding: "24px", boxShadow: t.shadow }}>
             <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
               <div style={{ width: 44, height: 44, borderRadius: 13, background: `linear-gradient(135deg, ${t.amber}, ${t.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, color: "#fff" }}>R</div>
-              <div><div style={{ fontSize: 14, fontWeight: 800 }}>Rifqi</div><div style={{ fontSize: 11, color: t.dim }}>Creator of Moku • Mahasiswa Teknik Biomedis</div></div>
+              <div><div style={{ fontSize: 14, fontWeight: 800 }}>Rifqi</div><div style={{ fontSize: 11, color: t.dim }}>Creator of Moku</div></div>
             </div>
             <p style={{ fontSize: 13, color: t.sub, lineHeight: 1.85, fontStyle: "italic" }}>
               &ldquo;Aku bikin Moku karena aku tau rasanya overwhelmed — saat semua tugas datang barengan dan kamu gak tau harus mulai dari mana. Laprak itu rutin, dan justru karena rutin, dia jadi exhausting. Bukan malas yang bikin kita nunda — tapi burn out. Dan begitu satu ketinggalan, semuanya ikut ketinggalan. Ujung-ujungnya cuma &lsquo;yang penting selesai.&rsquo; Aku gak mau kayak gitu terus. Aku mau sesuatu yang nemenin, bukan cuma nyelesaiin. Sesuatu yang jujur, yang gak pura-pura tau, dan yang bikin proses belajar terasa... warm. Moku adalah jawaban itu. Dan sekarang, aku share ke kamu.&rdquo;
