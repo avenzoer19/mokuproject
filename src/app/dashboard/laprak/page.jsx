@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { callGemini, searchCrossRef } from "@/lib/gemini";
 
 // ============ CONSTANTS ============
 const STORAGE_KEY = "laprak-ai-v3";
@@ -11,32 +12,6 @@ const C_DARK = { navy: "#a78bfa", gold: "#fbbf24", bg: "#0e0c15", card: "#1a1628
 let C = C_LIGHT;
 const shimmer = `@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`;
 
-// ============ GEMINI API ============
-async function callGemini(apiKey, systemPrompt, userMessage, images = [], docs = []) {
-  if (!apiKey) return "Error: API Key belum diisi.";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-  const parts = [{ text: `${systemPrompt}\n\nUser Request:\n${userMessage}` }];
-  images.forEach(img => parts.push({ inlineData: { mimeType: img.type, data: img.data } }));
-  docs.forEach(doc => parts.push({ inlineData: { mimeType: doc.type, data: doc.data } }));
-  try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts }] }) });
-    const d = await res.json();
-    if (d.error) return `Error: ${d.error.message}`;
-    return d.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Tidak ada respons.";
-  } catch (e) { return `Error koneksi: ${e.message}`; }
-}
-
-async function searchCrossRef(query, rows = 5) {
-  try {
-    const r = await fetch(`https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${rows}&filter=from-pub-date:2021&sort=relevance`);
-    const d = await r.json();
-    return (d.message?.items || []).map(i => ({
-      title: i.title?.[0] || "Untitled", authors: (i.author || []).map(a => `${a.family||""}, ${a.given?.[0]||""}.`).slice(0,3).join(", "),
-      year: i.published?.["date-parts"]?.[0]?.[0] || "n.d.", doi: i.DOI || "", journal: i["container-title"]?.[0] || "",
-      abstract: i.abstract || "", tier: i.abstract ? "abstract" : "metadata", source: "CrossRef",
-    }));
-  } catch { return []; }
-}
 
 const formatAPA = r => `${r.authors} (${r.year}). ${r.title}. ${r.journal}${r.doi ? `. https://doi.org/${r.doi}` : ""}`;
 const tierBadge = t => t === "fulltext" ? "✅ Full-text" : t === "abstract" ? "📋 Abstract" : "⚠️ Metadata";
@@ -103,7 +78,7 @@ function calcConfidence(data) {
 }
 
 // ============ DETERMINISTIC MATH ENGINE (Upgrade #2) ============
-async function runDeterministicCalc(apiKey, equation, instruksi, tabelData, prevResult) {
+async function runDeterministicCalc(equation, instruksi, tabelData, prevResult) {
   // Step 1: Ask Gemini to generate JS code
   const codePrompt = `Kamu adalah code generator. Tugas: HANYA tulis JavaScript function yang menghitung berdasarkan rumus dan data.
 
@@ -121,7 +96,7 @@ RULES:
 - Parse data string jadi angka, hitung dengan presisi penuh
 - Gunakan Math.sqrt, Math.log10, dll untuk operasi matematika`;
 
-  const jsCode = await callGemini(apiKey, "Kamu code generator JavaScript. Output HANYA code tanpa backticks/markdown.", codePrompt);
+  const jsCode = await callGemini("Kamu code generator JavaScript. Output HANYA code tanpa backticks/markdown.", codePrompt);
 
   // Step 2: Execute the code deterministically
   try {
@@ -202,18 +177,18 @@ function TableBuilder({ value, onChange }) {
   return (<div>
     <div style={{ display: "flex", gap: 6, marginBottom: 10 }}><Btn variant={mode === "build" ? "primary" : "ghost"} onClick={() => setMode("build")}>📊 Builder</Btn><Btn variant={mode === "paste" ? "primary" : "ghost"} onClick={() => setMode("paste")}>📋 Paste</Btn></div>
     {mode === "paste" ? (<div><p style={{ fontSize: 11, color: C.muted, margin: "0 0 8px" }}>Paste dari Excel (tab-separated). Baris 1 = header.</p><textarea style={{ ...s.textarea, minHeight: 80 }} value={pasteText} onChange={e => setPasteText(e.target.value)} placeholder="Paste..." /><Btn variant="success" onClick={parsePaste} style={{ marginTop: 8 }}>✓ Parse</Btn></div>) : (
-    <div><div style={{ overflowX: "auto", marginBottom: 8 }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}><thead><tr><th style={{ padding: "4px", color: C.muted, fontSize: 10, width: 24 }}>#</th>
-    {local.headers.map((h, i) => (<th key={i} style={{ padding: 3, position: "relative" }}><input style={{ ...s.input, fontSize: 11, fontWeight: 700, padding: "4px 6px", textAlign: "center" }} value={h} onChange={e => updHdr(i, e.target.value)} onFocus={() => { isFocused.current = true; }} onBlur={flush} />{local.headers.length > 1 && <button onClick={() => rmCol(i)} style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: C.red, color: "#fff", border: "none", fontSize: 8, cursor: "pointer" }}>✕</button>}</th>))}
-    <th style={{ width: 24 }}></th></tr></thead><tbody>
-    {local.rows.map((row, ri) => (<tr key={ri}><td style={{ color: C.muted, fontSize: 10, textAlign: "center" }}>{ri + 1}</td>
-    {row.map((cell, ci) => (<td key={ci} style={{ padding: 2 }}><input style={{ ...s.input, fontSize: 12, padding: "4px 6px" }} value={cell} onChange={e => updCell(ri, ci, e.target.value)} onFocus={() => { isFocused.current = true; }} onBlur={flush} /></td>))}
-    <td><button onClick={() => rmRow(ri)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11 }}>✕</button></td></tr>))}
-    </tbody></table></div><div style={{ display: "flex", gap: 6 }}><Btn variant="ghost" onClick={addRow}>+ Baris</Btn><Btn variant="ghost" onClick={addCol}>+ Kolom</Btn></div></div>)}
+      <div><div style={{ overflowX: "auto", marginBottom: 8 }}><table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}><thead><tr><th style={{ padding: "4px", color: C.muted, fontSize: 10, width: 24 }}>#</th>
+        {local.headers.map((h, i) => (<th key={i} style={{ padding: 3, position: "relative" }}><input style={{ ...s.input, fontSize: 11, fontWeight: 700, padding: "4px 6px", textAlign: "center" }} value={h} onChange={e => updHdr(i, e.target.value)} onFocus={() => { isFocused.current = true; }} onBlur={flush} />{local.headers.length > 1 && <button onClick={() => rmCol(i)} style={{ position: "absolute", top: -3, right: -3, width: 14, height: 14, borderRadius: "50%", background: C.red, color: "#fff", border: "none", fontSize: 8, cursor: "pointer" }}>✕</button>}</th>))}
+        <th style={{ width: 24 }}></th></tr></thead><tbody>
+          {local.rows.map((row, ri) => (<tr key={ri}><td style={{ color: C.muted, fontSize: 10, textAlign: "center" }}>{ri + 1}</td>
+            {row.map((cell, ci) => (<td key={ci} style={{ padding: 2 }}><input style={{ ...s.input, fontSize: 12, padding: "4px 6px" }} value={cell} onChange={e => updCell(ri, ci, e.target.value)} onFocus={() => { isFocused.current = true; }} onBlur={flush} /></td>))}
+            <td><button onClick={() => rmRow(ri)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11 }}>✕</button></td></tr>))}
+        </tbody></table></div><div style={{ display: "flex", gap: 6 }}><Btn variant="ghost" onClick={addRow}>+ Baris</Btn><Btn variant="ghost" onClick={addCol}>+ Kolom</Btn></div></div>)}
   </div>);
 }
 
 // ============ ANALISIS BLOCK V3 (Deterministic Engine) ============
-function AnalisisBlock({ index, value, total, onChange, onRemove, apiKey, allTabels }) {
+function AnalisisBlock({ index, value, total, onChange, onRemove, allTabels }) {
   const fRef = useRef(null);
   const [calculating, setCalculating] = useState(false);
   const [showWorking, setShowWorking] = useState(false);
@@ -221,10 +196,9 @@ function AnalisisBlock({ index, value, total, onChange, onRemove, apiKey, allTab
   const handleFoto = (e) => { const file = e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = ev => { onChange({ ...value, fotoRumus: { name: file.name, type: file.type, data: ev.target.result.split(",")[1], preview: ev.target.result } }); }; r.readAsDataURL(file); };
 
   const autoCalc = async () => {
-    if (!apiKey) { alert("API Key belum diisi!"); return; }
     setCalculating(true);
     const tabelData = (allTabels || []).map(t => `${t.title}:\n${t.headers.join(" | ")}\n${t.rows.map(r => r.join(" | ")).join("\n")}`).join("\n\n");
-    const result = await runDeterministicCalc(apiKey, value.equation, value.instruksi, tabelData, index > 0 ? value.prevResult : "");
+    const result = await runDeterministicCalc(value.equation, value.instruksi, tabelData, index > 0 ? value.prevResult : "");
     onChange({ ...value, hasil: result.cleanResult || "", workingSheet: result.workingSheet || "", deterministicResult: true, resultTables: result.tables || [] });
     setCalculating(false);
   };
@@ -263,11 +237,11 @@ function AnalisisBlock({ index, value, total, onChange, onRemove, apiKey, allTab
       )}
       {value.resultTables?.length > 0 && value.resultTables.map((rt, rti) => (
         <div key={rti} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 4 }}>{rt.title || `Tabel Hasil ${rti+1}`}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 4 }}>{rt.title || `Tabel Hasil ${rti + 1}`}</div>
           <div style={{ overflowX: "auto", fontSize: 11 }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
-              <thead><tr>{(rt.headers||[]).map((h,i) => <th key={i} style={{ padding: "4px 8px", background: "rgba(45,127,249,.1)", border: `1px solid ${C.border}`, color: C.text, fontSize: 10 }}>{h}</th>)}</tr></thead>
-              <tbody>{(rt.rows||[]).map((row,ri) => <tr key={ri}>{row.map((c,ci) => <td key={ci} style={{ padding: "3px 8px", border: `1px solid ${C.border}`, color: C.text, fontSize: 10 }}>{c}</td>)}</tr>)}</tbody>
+              <thead><tr>{(rt.headers || []).map((h, i) => <th key={i} style={{ padding: "4px 8px", background: "rgba(45,127,249,.1)", border: `1px solid ${C.border}`, color: C.text, fontSize: 10 }}>{h}</th>)}</tr></thead>
+              <tbody>{(rt.rows || []).map((row, ri) => <tr key={ri}>{row.map((c, ci) => <td key={ci} style={{ padding: "3px 8px", border: `1px solid ${C.border}`, color: C.text, fontSize: 10 }}>{c}</td>)}</tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -278,7 +252,7 @@ function AnalisisBlock({ index, value, total, onChange, onRemove, apiKey, allTab
 }
 
 // ============ REF MANAGER V3 (3-Tier + PDF Upload) ============
-function RefManager({ selectedRefs, onRefsChange, apiKey }) {
+function RefManager({ selectedRefs, onRefsChange }) {
   const [query, setQuery] = useState(""); const [results, setResults] = useState([]); const [busy, setBusy] = useState(false);
   const [localRefs, setLocalRefs] = useState(selectedRefs || []); const [uploading, setUploading] = useState(false); const [uploadMsg, setUploadMsg] = useState("");
   const onRefsRef = useRef(onRefsChange); onRefsRef.current = onRefsChange;
@@ -292,10 +266,10 @@ function RefManager({ selectedRefs, onRefsChange, apiKey }) {
 
   const handlePdfUpload = async (e) => {
     const files = Array.from(e.target.files);
-    if (!files.length || !apiKey) { if (!apiKey) alert("API Key belum diisi!"); return; }
+    if (!files.length) return;
     setUploading(true);
     let accumulated = [...localRefs];
-    
+
     for (let fi = 0; fi < files.length; fi++) {
       const file = files[fi];
       setUploadMsg(`Reading PDF ${fi + 1}/${files.length}: ${file.name}...`);
@@ -307,7 +281,7 @@ function RefManager({ selectedRefs, onRefsChange, apiKey }) {
           reader.readAsDataURL(file);
         });
 
-        const extracted = await callGemini(apiKey,
+        const extracted = await callGemini(
           `You are an academic paper analyzer. Read this PDF thoroughly. Extract information into a JSON object.
 
 CRITICAL JSON RULES:
@@ -347,7 +321,7 @@ JSON format:
               const getText = (key) => { const m = extracted.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`)); return m ? m[1].replace(/\\n/g, ' ').replace(/\\"/g, '"') : ""; };
               meta = { title: getText("title"), authors: getText("authors"), year: getText("year"), journal: getText("journal"), doi: getText("doi"), abstract: getText("abstract"), introduction: getText("introduction"), methodology: getText("methodology"), results: getText("results"), discussion: getText("discussion"), conclusions: getText("conclusions"), keyFindings: getText("keyFindings"), relevantData: getText("relevantData"), limitations: getText("limitations") };
               if (!meta.title) meta = null;
-            } catch {}
+            } catch { }
           }
         }
 
@@ -396,15 +370,16 @@ JSON format:
         <input style={{ ...s.input, flex: 1 }} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search CrossRef..." onKeyDown={e => e.key === "Enter" && doSearch()} />
         <Btn onClick={doSearch} disabled={busy}>{busy ? "⏳" : "Cari"}</Btn>
       </div>
-      {results.map((r, i) => { const added = localRefs.some(x => x.doi === r.doi); return (
-        <div key={i} style={{ background: added ? "rgba(13,186,115,.15)" : "rgba(13,186,115,.06)", border: `1px solid rgba(13,186,115,.15)`, borderRadius: 12, padding: 10, marginBottom: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 3, flex: 1 }}>{r.title}</div>
-            <span style={{ fontSize: 9, color: tierColor(r.tier), fontWeight: 700, flexShrink: 0 }}>{tierBadge(r.tier)}</span>
-          </div>
-          <div style={{ fontSize: 10, color: C.muted }}>{r.authors} ({r.year}) — {r.journal}</div>
-          {added ? <span style={{ fontSize: 10, color: C.green, fontWeight: 600 }}>✓ Added</span> : <Btn variant="success" onClick={() => handleAdd(r)} style={{ padding: "3px 10px", fontSize: 10, marginTop: 4 }}>+ Tambah</Btn>}
-        </div>);
+      {results.map((r, i) => {
+        const added = localRefs.some(x => x.doi === r.doi); return (
+          <div key={i} style={{ background: added ? "rgba(13,186,115,.15)" : "rgba(13,186,115,.06)", border: `1px solid rgba(13,186,115,.15)`, borderRadius: 12, padding: 10, marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 3, flex: 1 }}>{r.title}</div>
+              <span style={{ fontSize: 9, color: tierColor(r.tier), fontWeight: 700, flexShrink: 0 }}>{tierBadge(r.tier)}</span>
+            </div>
+            <div style={{ fontSize: 10, color: C.muted }}>{r.authors} ({r.year}) — {r.journal}</div>
+            {added ? <span style={{ fontSize: 10, color: C.green, fontWeight: 600 }}>✓ Added</span> : <Btn variant="success" onClick={() => handleAdd(r)} style={{ padding: "3px 10px", fontSize: 10, marginTop: 4 }}>+ Tambah</Btn>}
+          </div>);
       })}
     </Card>
     <Card title={`Referensi Terpilih (${localRefs.length})`} icon="📚" gold>
@@ -425,8 +400,6 @@ export default function LaprakAI() {
   const __t = useTheme();
   C = __t.mode === "dark" ? C_DARK : C_LIGHT;
   const [step, setStep] = useState(1);
-  const [apiKey, setApiKey] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -451,10 +424,11 @@ export default function LaprakAI() {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   // Load
-  useEffect(() => { (async () => {
-    try { const r = (() => { const v = localStorage.getItem(STORAGE_KEY); return v ? { value: v } : null; })(); if (r?.value) { setData(prev => ({ ...prev, ...JSON.parse(r.value) })); setSaved("Loaded"); setTimeout(() => setSaved(""), 2000); } } catch {}
-    try { const k = (() => { const v = localStorage.getItem("laprak-api-key"); return v ? { value: v } : null; })(); if (k?.value) setApiKey(k.value); } catch {}
-  })(); }, []);
+  useEffect(() => {
+    (async () => {
+      try { const r = (() => { const v = localStorage.getItem(STORAGE_KEY); return v ? { value: v } : null; })(); if (r?.value) { setData(prev => ({ ...prev, ...JSON.parse(r.value) })); setSaved("Loaded"); setTimeout(() => setSaved(""), 2000); } } catch { }
+    })();
+  }, []);
 
   const saveToStorage = useCallback(async (d) => {
     try {
@@ -464,12 +438,10 @@ export default function LaprakAI() {
       if (o.selectedRefs) o.selectedRefs = o.selectedRefs.map(r => { const { pdfData, ...rest } = r; return rest; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
       setSaved("✓"); setTimeout(() => setSaved(""), 1200);
-    } catch {}
+    } catch { }
   }, []);
   const changeStep = useCallback((n) => { saveToStorage(); setStep(n); }, [saveToStorage]);
   const upd = useCallback((k, v) => { setData(prev => ({ ...prev, [k]: v })); }, []);
-  const saveApiKey = async (k) => { setApiKey(k); try { localStorage.setItem("laprak-api-key", k); } catch {} };
-
   const handlePhoto = (e) => { Array.from(e.target.files).forEach(f => { const r = new FileReader(); r.onload = ev => { setData(prev => ({ ...prev, fotoResults: [...prev.fotoResults, { name: f.name, type: f.type, data: ev.target.result.split(",")[1], preview: ev.target.result }] })); }; r.readAsDataURL(f); }); };
 
   const handleLogoUpload = (e) => {
@@ -480,7 +452,7 @@ export default function LaprakAI() {
   };
 
   const tableToText = () => (data.hasilTabels || []).map((t, i) => { if (!t.rows.some(r => r.some(c => c))) return ""; return `${t.title}:\n${t.headers.join(" | ")}\n${t.rows.map(r => r.join(" | ")).join("\n")}`; }).filter(Boolean).join("\n\n");
-  const analisisCleanText = () => { if (!data.enableAnalisis) return ""; return (data.analisisBlocks || []).map((b, i) => { const p = []; if (b.equation) p.push(`Rumus: ${b.equation}`); if (b.hasil) p.push(b.hasil); if (b.keterangan) p.push(`Keterangan: ${b.keterangan}`); return p.length ? `Analisis ${i+1}:\n${p.join("\n")}` : ""; }).filter(Boolean).join("\n\n"); };
+  const analisisCleanText = () => { if (!data.enableAnalisis) return ""; return (data.analisisBlocks || []).map((b, i) => { const p = []; if (b.equation) p.push(`Rumus: ${b.equation}`); if (b.hasil) p.push(b.hasil); if (b.keterangan) p.push(`Keterangan: ${b.keterangan}`); return p.length ? `Analisis ${i + 1}:\n${p.join("\n")}` : ""; }).filter(Boolean).join("\n\n"); };
 
   // Build ref context for AI — full-text refs get comprehensive content
   const refContext = () => (data.selectedRefs || []).map(r => {
@@ -507,7 +479,7 @@ export default function LaprakAI() {
   const generateStep2 = async () => {
     setLoading(true);
     setLoadingMsg("Generating Pendahuluan...");
-    const pendResult = await callGemini(apiKey, SYS, `Buatkan HANYA bagian PENDAHULUAN untuk laporan praktikum:
+    const pendResult = await callGemini(SYS, `Buatkan HANYA bagian PENDAHULUAN untuk laporan praktikum:
 - Mata Kuliah: ${data.mataKuliah}, Topik: ${data.topikPraktikum}, Judul: ${data.judulLaporan}
 
 Isi: Latar belakang topik, tujuan praktikum, manfaat praktikum. 3-4 paragraf.
@@ -516,7 +488,7 @@ JANGAN tulis Studi Pustaka di sini. HANYA Pendahuluan. TANPA header "PENDAHULUAN
     upd("pendahuluan", pendResult.replace(/^PENDAHULUAN[:\s]*/i, "").trim());
 
     setLoadingMsg("Generating Studi Pustaka...");
-    const spResult = await callGemini(apiKey, SYS, `Buatkan HANYA bagian STUDI PUSTAKA untuk laporan praktikum:
+    const spResult = await callGemini(SYS, `Buatkan HANYA bagian STUDI PUSTAKA untuk laporan praktikum:
 - Mata Kuliah: ${data.mataKuliah}, Topik: ${data.topikPraktikum}, Judul: ${data.judulLaporan}
 
 Isi: 5 sub-bab (A-E) yang relevan dengan topik, masing-masing 2-3 paragraf.
@@ -535,8 +507,8 @@ Format: A. [Judul]\n[teks]\n\nB. [Judul]\n[teks]\n...sampai E.`);
     setLoadingMsg("Agent analyzing data vs literature...");
     const imgs = data.fotoResults.slice(0, 4).map(f => ({ type: f.type, data: f.data }));
     let visionDesc = "";
-    if (imgs.length > 0) { setLoadingMsg("Vision AI analyzing photos..."); visionDesc = await callGemini(apiKey, "Deskripsikan detail ilmiah gambar hasil praktikum. Bahasa Indonesia.", `Topik: "${data.topikPraktikum}":`, imgs); }
-    const result = await callGemini(apiKey, SYS, `Research Agent. Tugas:
+    if (imgs.length > 0) { setLoadingMsg("Vision AI analyzing photos..."); visionDesc = await callGemini("Deskripsikan detail ilmiah gambar hasil praktikum. Bahasa Indonesia.", `Topik: "${data.topikPraktikum}":`, imgs); }
+    const result = await callGemini(SYS, `Research Agent. Tugas:
 1. Analisis data IMMUTABLE
 2. Bandingkan dengan literatur (JUJUR tentang tier referensi)
 3. Identifikasi anomali
@@ -559,7 +531,7 @@ Output SUMMARY OF FINDINGS: ${data.preFeedback ? "PRIORITASKAN arahan user di at
   const generatePembahasan = async () => {
     setLoading(true);
     setLoadingMsg("Drafting Pembahasan...");
-    const pembResult = await callGemini(apiKey, SYS, `Buat HANYA bagian PEMBAHASAN:
+    const pembResult = await callGemini(SYS, `Buat HANYA bagian PEMBAHASAN:
 Topik: ${data.topikPraktikum}, Judul: ${data.judulLaporan}
 Data: ${tableToText()}
 ${data.enableAnalisis ? `Analisis: ${analisisCleanText()}` : ""}
@@ -573,7 +545,7 @@ JANGAN tulis Kesimpulan di sini. HANYA Pembahasan. TANPA header "PEMBAHASAN:" di
     upd("pembahasan", pembResult.replace(/^PEMBAHASAN[:\s]*/i, "").trim());
 
     setLoadingMsg("Drafting Kesimpulan...");
-    const kesmResult = await callGemini(apiKey, SYS, `Buat HANYA bagian KESIMPULAN berdasarkan:
+    const kesmResult = await callGemini(SYS, `Buat HANYA bagian KESIMPULAN berdasarkan:
 Topik: ${data.topikPraktikum}, Judul: ${data.judulLaporan}
 Pembahasan yang sudah ditulis: ${pembResult.substring(0, 1500)}
 Data: ${tableToText().substring(0, 500)}
@@ -588,7 +560,7 @@ JANGAN tulis Pembahasan. HANYA Kesimpulan. TANPA header "KESIMPULAN:" di awal.`)
   const revisiPembahasan = async () => {
     if (!data.revisiInstruksi?.trim()) { alert("Tulis instruksi revisi dulu!"); return; }
     setLoading(true); setLoadingMsg("Merevisi Pembahasan...");
-    const revised = await callGemini(apiKey, SYS, `REVISI bagian PEMBAHASAN berikut berdasarkan instruksi user.
+    const revised = await callGemini(SYS, `REVISI bagian PEMBAHASAN berikut berdasarkan instruksi user.
 
 PEMBAHASAN SAAT INI:
 ${data.pembahasan}
@@ -615,7 +587,7 @@ RULES:
   const revisiKesimpulan = async () => {
     if (!data.revisiInstruksi?.trim()) { alert("Tulis instruksi revisi dulu!"); return; }
     setLoading(true); setLoadingMsg("Merevisi Kesimpulan...");
-    const revised = await callGemini(apiKey, SYS, `REVISI bagian KESIMPULAN berikut berdasarkan instruksi user.
+    const revised = await callGemini(SYS, `REVISI bagian KESIMPULAN berikut berdasarkan instruksi user.
 
 KESIMPULAN SAAT INI:
 ${data.kesimpulan}
@@ -636,7 +608,7 @@ RULES:
 
   const generateAbstrak = async () => {
     setLoading(true); setLoadingMsg("Generating Abstrak...");
-    const result = await callGemini(apiKey, "Tulis abstrak ID & EN, 150-200 kata each. Tanpa markdown.",
+    const result = await callGemini("Tulis abstrak ID & EN, 150-200 kata each. Tanpa markdown.",
       `Abstrak untuk: ${data.judulLaporan}\nPendahuluan: ${data.pendahuluan?.substring(0, 400)}\nHasil: ${data.hasilNaratif?.substring(0, 400)}\nKesimpulan: ${data.kesimpulan?.substring(0, 400)}\n\nFormat: ABSTRAK:\n[ID]\n\nABSTRACT:\n[EN]\n\nKata Kunci: [5]\nKeywords: [5]`);
     upd("abstrak", result); setLoading(false);
   };
@@ -647,7 +619,7 @@ RULES:
     setExporting(true);
     try {
       const dx = await import("docx");
-      const { Document: Doc, Packer: Pkr, Paragraph: P, TextRun: T, Table: Tbl, TableRow: TR, TableCell: TC, 
+      const { Document: Doc, Packer: Pkr, Paragraph: P, TextRun: T, Table: Tbl, TableRow: TR, TableCell: TC,
         ImageRun: IR, Header: Hdr, Footer: Ftr, AlignmentType: A, HeadingLevel: HL, Math: Mt, MathRun: MR,
         BorderStyle: BS, WidthType: W, ShadingType: ST, PageNumber: PN, SectionType: SecT } = dx;
 
@@ -810,7 +782,7 @@ RULES:
       // ============ BUILD MAIN CONTENT (2-column, Roman numerals, conditional) ============
       const hasAnalisis = data.enableAnalisis && (data.analisisBlocks || []).some(b => b.equation || b.hasil);
       // Roman numeral counter
-      const ROM = ["I","II","III","IV","V","VI","VII","VIII","IX","X"];
+      const ROM = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
       let romIdx = 0;
 
       const cc = [];
@@ -923,24 +895,24 @@ RULES:
 
   // ============ STEP RENDERS ============
   const stepNames = ["Profil & Topik", "Referensi & Lit. Review", "Data & Analisis", "AI Agent & Feedback", "Review & Export"];
-  const done = [!!(data.nama && data.nim && data.mataKuliah && data.topikPraktikum && data.judulLaporan), !!(data.pendahuluan && data.studiPustaka), !!(data.alatBahan && data.prosedur && (data.hasilNaratif || (data.hasilTabels||[]).some(t => t.rows.some(r => r.some(c => c))))), !!(data.pembahasan && data.kesimpulan), !!(data.abstrak)];
+  const done = [!!(data.nama && data.nim && data.mataKuliah && data.topikPraktikum && data.judulLaporan), !!(data.pendahuluan && data.studiPustaka), !!(data.alatBahan && data.prosedur && (data.hasilNaratif || (data.hasilTabels || []).some(t => t.rows.some(r => r.some(c => c))))), !!(data.pembahasan && data.kesimpulan), !!(data.abstrak)];
 
   const Step1 = () => (<>
     <Card title="Profil Mahasiswa" icon="👤" gold>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={s.grid2}>
-          <div><label style={s.label}>Nama Lengkap</label><DInput value={data.nama} onCommit={v => upd("nama",v)} placeholder="" /></div>
-          <div><label style={s.label}>NIM</label><DInput value={data.nim} onCommit={v => upd("nim",v)} placeholder="" /></div>
+          <div><label style={s.label}>Nama Lengkap</label><DInput value={data.nama} onCommit={v => upd("nama", v)} placeholder="" /></div>
+          <div><label style={s.label}>NIM</label><DInput value={data.nim} onCommit={v => upd("nim", v)} placeholder="" /></div>
         </div>
         <div style={s.grid2}>
-          <div><label style={s.label}>Kelompok</label><DInput value={data.kelompok} onCommit={v => upd("kelompok",v)} placeholder="" /></div>
-          <div><label style={s.label}>Kelas</label><DInput value={data.kelas} onCommit={v => upd("kelas",v)} placeholder="" /></div>
+          <div><label style={s.label}>Kelompok</label><DInput value={data.kelompok} onCommit={v => upd("kelompok", v)} placeholder="" /></div>
+          <div><label style={s.label}>Kelas</label><DInput value={data.kelas} onCommit={v => upd("kelas", v)} placeholder="" /></div>
         </div>
-        <div><label style={s.label}>Program Studi</label><DInput value={data.prodi} onCommit={v => upd("prodi",v)} placeholder="" /></div>
-        <div><label style={s.label}>Fakultas</label><DInput value={data.fakultas} onCommit={v => upd("fakultas",v)} placeholder="" /></div>
+        <div><label style={s.label}>Program Studi</label><DInput value={data.prodi} onCommit={v => upd("prodi", v)} placeholder="" /></div>
+        <div><label style={s.label}>Fakultas</label><DInput value={data.fakultas} onCommit={v => upd("fakultas", v)} placeholder="" /></div>
         <div style={s.grid2}>
-          <div><label style={s.label}>Universitas</label><DInput value={data.universitas} onCommit={v => upd("universitas",v)} placeholder="" /></div>
-          <div><label style={s.label}>Tahun</label><DInput value={data.tahun} onCommit={v => upd("tahun",v)} placeholder="" /></div>
+          <div><label style={s.label}>Universitas</label><DInput value={data.universitas} onCommit={v => upd("universitas", v)} placeholder="" /></div>
+          <div><label style={s.label}>Tahun</label><DInput value={data.tahun} onCommit={v => upd("tahun", v)} placeholder="" /></div>
         </div>
       </div>
     </Card>
@@ -962,44 +934,44 @@ RULES:
       </div>
     </Card>
     <Card title="Detail Praktikum" icon="🔬" gold><div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {[["mataKuliah","Mata Kuliah","Eksperimen Teknik Biomedis II"],["topikPraktikum","Topik","Biokompatibilitas Material"],["judulLaporan","Judul","Judul lengkap"]].map(([k,l,p]) => <div key={k}><label style={s.label}>{l}</label><DInput value={data[k]} onCommit={v => upd(k,v)} placeholder={p} /></div>)}
-      <div style={s.grid2}><div><label style={s.label}>Tanggal</label><DInput type="date" value={data.tanggalPraktikum} onCommit={v => upd("tanggalPraktikum",v)} /></div><div><label style={s.label}>Dosen Pengampu</label><DInput value={data.dosenPengampu} onCommit={v => upd("dosenPengampu",v)} /></div></div>
-      <div><label style={s.label}>Asisten Dosen</label><DInput value={data.asisten} onCommit={v => upd("asisten",v)} /></div>
+      {[["mataKuliah", "Mata Kuliah", "Eksperimen Teknik Biomedis II"], ["topikPraktikum", "Topik", "Biokompatibilitas Material"], ["judulLaporan", "Judul", "Judul lengkap"]].map(([k, l, p]) => <div key={k}><label style={s.label}>{l}</label><DInput value={data[k]} onCommit={v => upd(k, v)} placeholder={p} /></div>)}
+      <div style={s.grid2}><div><label style={s.label}>Tanggal</label><DInput type="date" value={data.tanggalPraktikum} onCommit={v => upd("tanggalPraktikum", v)} /></div><div><label style={s.label}>Dosen Pengampu</label><DInput value={data.dosenPengampu} onCommit={v => upd("dosenPengampu", v)} /></div></div>
+      <div><label style={s.label}>Asisten Dosen</label><DInput value={data.asisten} onCommit={v => upd("asisten", v)} /></div>
     </div></Card>
   </>);
 
   const Step2Rest = () => (<>
-    <Card title="Pendahuluan" icon="📝" gold action={<Btn onClick={generateStep2} disabled={loading || !data.topikPraktikum}>{loading ? "⏳ Generating..." : "🤖 Generate AI"}</Btn>}><DTextarea value={data.pendahuluan} onCommit={v => upd("pendahuluan",v)} placeholder="Generate atau tulis manual..." /></Card>
-    <Card title="Studi Pustaka (A-E)" icon="📖" gold><DTextarea value={data.studiPustaka} onCommit={v => upd("studiPustaka",v)} style={{ minHeight: 180 }} placeholder="Di-generate bersama Pendahuluan..." /></Card>
+    <Card title="Pendahuluan" icon="📝" gold action={<Btn onClick={generateStep2} disabled={loading || !data.topikPraktikum}>{loading ? "⏳ Generating..." : "🤖 Generate AI"}</Btn>}><DTextarea value={data.pendahuluan} onCommit={v => upd("pendahuluan", v)} placeholder="Generate atau tulis manual..." /></Card>
+    <Card title="Studi Pustaka (A-E)" icon="📖" gold><DTextarea value={data.studiPustaka} onCommit={v => upd("studiPustaka", v)} style={{ minHeight: 180 }} placeholder="Di-generate bersama Pendahuluan..." /></Card>
   </>);
 
   const Step3 = () => (<>
-    <Card title="Alat & Bahan" icon="🧪" gold><DTextarea value={data.alatBahan} onCommit={v => upd("alatBahan",v)} placeholder="Naratif..." /></Card>
-    <Card title="Prosedur" icon="📋" gold><DTextarea value={data.prosedur} onCommit={v => upd("prosedur",v)} style={{ minHeight: 140 }} placeholder="Langkah-langkah..." /></Card>
-    <Card title="Hasil Pengamatan — Tabel" icon="📊" gold action={<Btn variant="ghost" onClick={() => upd("hasilTabels", [...(data.hasilTabels||[]), { title: `Tabel ${(data.hasilTabels||[]).length+1}`, headers: ["No","Parameter","Nilai","Satuan"], rows: [["1","","",""]] }])}>+ Tambah Tabel</Btn>}>
+    <Card title="Alat & Bahan" icon="🧪" gold><DTextarea value={data.alatBahan} onCommit={v => upd("alatBahan", v)} placeholder="Naratif..." /></Card>
+    <Card title="Prosedur" icon="📋" gold><DTextarea value={data.prosedur} onCommit={v => upd("prosedur", v)} style={{ minHeight: 140 }} placeholder="Langkah-langkah..." /></Card>
+    <Card title="Hasil Pengamatan — Tabel" icon="📊" gold action={<Btn variant="ghost" onClick={() => upd("hasilTabels", [...(data.hasilTabels || []), { title: `Tabel ${(data.hasilTabels || []).length + 1}`, headers: ["No", "Parameter", "Nilai", "Satuan"], rows: [["1", "", "", ""]] }])}>+ Tambah Tabel</Btn>}>
       <p style={{ fontSize: 11, color: C.muted, margin: "0 0 10px" }}>Data IMMUTABLE. Validation Layer akan cek outlier otomatis.</p>
-      {(data.hasilTabels||[]).map((tbl, ti) => (<div key={ti} style={{ marginBottom: 16, background: "rgba(255,255,255,.02)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+      {(data.hasilTabels || []).map((tbl, ti) => (<div key={ti} style={{ marginBottom: 16, background: "rgba(255,255,255,.02)", border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <DInput value={tbl.title} onCommit={v => { const ts = [...data.hasilTabels]; ts[ti] = { ...ts[ti], title: v }; upd("hasilTabels", ts); }} style={{ fontWeight: 700, fontSize: 13, background: "transparent", border: "none", borderBottom: `1px solid ${C.inputB}`, borderRadius: 0, padding: "4px 0", color: C.gold }} />
-          {(data.hasilTabels||[]).length > 1 && <button onClick={() => upd("hasilTabels", data.hasilTabels.filter((_,i) => i!==ti))} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 12 }}>🗑️</button>}
+          {(data.hasilTabels || []).length > 1 && <button onClick={() => upd("hasilTabels", data.hasilTabels.filter((_, i) => i !== ti))} style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 12 }}>🗑️</button>}
         </div>
         <TableBuilder value={tbl} onChange={v => { const ts = [...data.hasilTabels]; ts[ti] = { ...ts[ti], ...v }; upd("hasilTabels", ts); }} />
       </div>))}
     </Card>
-    <Card title="Naratif" icon="📝" gold><DTextarea value={data.hasilNaratif} onCommit={v => upd("hasilNaratif",v)} placeholder="Deskripsi tambahan..." /></Card>
+    <Card title="Naratif" icon="📝" gold><DTextarea value={data.hasilNaratif} onCommit={v => upd("hasilNaratif", v)} placeholder="Deskripsi tambahan..." /></Card>
     <Card title="Foto Hasil" icon="📷" gold>
       <input ref={fileRef} type="file" accept="image/*" multiple onChange={handlePhoto} style={{ display: "none" }} />
       <Btn variant="secondary" onClick={() => fileRef.current?.click()}>+ Foto</Btn>
-      {data.fotoResults.length > 0 && <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>{data.fotoResults.map((f, i) => <div key={i} style={{ position: "relative" }}><img src={f.preview} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, border: `1px solid ${C.border}` }} /><button onClick={() => setData(p => ({ ...p, fotoResults: p.fotoResults.filter((_, x) => x!==i) }))} style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: C.red, color: "#fff", border: "none", fontSize: 9, cursor: "pointer" }}>✕</button></div>)}</div>}
+      {data.fotoResults.length > 0 && <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>{data.fotoResults.map((f, i) => <div key={i} style={{ position: "relative" }}><img src={f.preview} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 12, border: `1px solid ${C.border}` }} /><button onClick={() => setData(p => ({ ...p, fotoResults: p.fotoResults.filter((_, x) => x !== i) }))} style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: C.red, color: "#fff", border: "none", fontSize: 9, cursor: "pointer" }}>✕</button></div>)}</div>}
     </Card>
     <Card title="Analisis Matematis" icon="🧮" gold action={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      {data.enableAnalisis && <Btn variant="ghost" onClick={() => upd("analisisBlocks", [...(data.analisisBlocks||[]), { equation: "", instruksi: "", fotoRumus: null, hasil: "", workingSheet: "", keterangan: "", deterministicResult: false, resultTables: [] }])}>+ Tambah</Btn>}
+      {data.enableAnalisis && <Btn variant="ghost" onClick={() => upd("analisisBlocks", [...(data.analisisBlocks || []), { equation: "", instruksi: "", fotoRumus: null, hasil: "", workingSheet: "", keterangan: "", deterministicResult: false, resultTables: [] }])}>+ Tambah</Btn>}
       <label style={{ fontSize: 11, color: C.muted, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><input type="checkbox" checked={data.enableAnalisis} onChange={e => upd("enableAnalisis", e.target.checked)} style={{ accentColor: C.accent }} />Aktifkan</label>
     </div>}>
       {data.enableAnalisis ? <div><p style={{ fontSize: 11, color: C.muted, margin: "0 0 12px" }}>🔧 Deterministic Engine: AI generate JS code → eksekusi di browser → angka dijamin akurat. Clean Result masuk laporan, Working Sheet untuk verifikasi.</p>
-        {(data.analisisBlocks||[]).map((blk, bi) => <AnalisisBlock key={bi} index={bi} value={blk} total={(data.analisisBlocks||[]).length} apiKey={apiKey} allTabels={data.hasilTabels}
-          onChange={v => { const bs = [...data.analisisBlocks]; bs[bi] = { ...v, prevResult: bi > 0 ? data.analisisBlocks[bi-1]?.hasil : "" }; upd("analisisBlocks", bs); }}
-          onRemove={() => upd("analisisBlocks", data.analisisBlocks.filter((_,i) => i!==bi))} />)}
+        {(data.analisisBlocks || []).map((blk, bi) => <AnalisisBlock key={bi} index={bi} value={blk} total={(data.analisisBlocks || []).length} allTabels={data.hasilTabels}
+          onChange={v => { const bs = [...data.analisisBlocks]; bs[bi] = { ...v, prevResult: bi > 0 ? data.analisisBlocks[bi - 1]?.hasil : "" }; upd("analisisBlocks", bs); }}
+          onRemove={() => upd("analisisBlocks", data.analisisBlocks.filter((_, i) => i !== bi))} />)}
       </div> : <p style={{ color: C.muted, fontSize: 12, margin: 0 }}>Opsional. Aktifkan untuk perhitungan deterministik.</p>}
     </Card>
   </>);
@@ -1013,7 +985,7 @@ RULES:
 
     <Card title="Stage 1 — Pre-Feedback (Arahan Awal)" icon="⭐" gold>
       <p style={{ fontSize: 11, color: C.muted, margin: "0 0 10px" }}>Tulis arahan SEBELUM AI memproses — apa yang harus difokuskan dalam pembahasan? AI akan memprioritaskan ini.</p>
-      <DTextarea value={data.preFeedback} onCommit={v => upd("preFeedback",v)} style={{ minHeight: 80 }} placeholder='Contoh: "Fokuskan pada pengaruh suhu terhadap swelling ratio, bahas anomali sampel 3 karena alat kurang presisi, bandingkan dengan paper Zhang et al."' />
+      <DTextarea value={data.preFeedback} onCommit={v => upd("preFeedback", v)} style={{ minHeight: 80 }} placeholder='Contoh: "Fokuskan pada pengaruh suhu terhadap swelling ratio, bahas anomali sampel 3 karena alat kurang presisi, bandingkan dengan paper Zhang et al."' />
     </Card>
 
     <Card title="Stage 2 — AI Research Agent" icon="🔬" gold action={<Btn onClick={generateSummary} disabled={loading}>{loading && !data.summaryFindings ? "⏳ Analyzing..." : "🤖 Run Agent"}</Btn>}>
@@ -1024,7 +996,7 @@ RULES:
     {data.summaryFindings && <>
       <Card title="Stage 3 — Post-Feedback (Konteks Lapangan)" icon="💬" gold>
         <p style={{ fontSize: 11, color: C.muted, margin: "0 0 10px" }}>Setelah lihat Summary, ada konteks tambahan? "Elektroda goyang", "Suhu ruangan naik 2°C", dll.</p>
-        <DTextarea value={data.userFeedback} onCommit={v => upd("userFeedback",v)} style={{ minHeight: 80 }} placeholder="Opsional — tambahan konteks setelah lihat summary..." />
+        <DTextarea value={data.userFeedback} onCommit={v => upd("userFeedback", v)} style={{ minHeight: 80 }} placeholder="Opsional — tambahan konteks setelah lihat summary..." />
       </Card>
       <Card title="Stage 4 — Generate" icon="⚡" gold action={<Btn onClick={generatePembahasan} disabled={loading}>{loading ? "⏳ Drafting..." : "🤖 Generate Pembahasan"}</Btn>}>
         <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>Pembahasan + Kesimpulan dari Pre-Feedback + Summary + Post-Feedback.</p>
@@ -1033,15 +1005,15 @@ RULES:
 
     {data.pembahasan && <>
       <Card title="Pembahasan (Draft)" icon="📝" gold action={<ConfidenceBadge data={data} />}>
-        <DTextarea value={data.pembahasan} onCommit={v => upd("pembahasan",v)} style={{ minHeight: 200 }} />
+        <DTextarea value={data.pembahasan} onCommit={v => upd("pembahasan", v)} style={{ minHeight: 200 }} />
       </Card>
       <Card title="Kesimpulan (Draft)" icon="✅" gold>
-        <DTextarea value={data.kesimpulan} onCommit={v => upd("kesimpulan",v)} />
+        <DTextarea value={data.kesimpulan} onCommit={v => upd("kesimpulan", v)} />
       </Card>
 
       <Card title="Stage 5 — Revisi" icon="🔄" gold>
         <p style={{ fontSize: 11, color: C.muted, margin: "0 0 10px" }}>Tidak puas dengan draft? Tulis instruksi revisi spesifik, lalu pilih bagian mana yang mau direvisi.</p>
-        <DTextarea value={data.revisiInstruksi} onCommit={v => upd("revisiInstruksi",v)} style={{ minHeight: 70 }} placeholder='Contoh: "Paragraf 2 kurang membahas error source", "Tambahkan perbandingan dengan paper Yoon et al.", "Kesimpulan terlalu panjang, ringkas jadi 2 paragraf"' />
+        <DTextarea value={data.revisiInstruksi} onCommit={v => upd("revisiInstruksi", v)} style={{ minHeight: 70 }} placeholder='Contoh: "Paragraf 2 kurang membahas error source", "Tambahkan perbandingan dengan paper Yoon et al.", "Kesimpulan terlalu panjang, ringkas jadi 2 paragraf"' />
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <Btn variant="primary" onClick={revisiPembahasan} disabled={loading || !data.revisiInstruksi?.trim()}>{loading ? "⏳" : "🔄 Revisi Pembahasan"}</Btn>
           <Btn variant="secondary" onClick={revisiKesimpulan} disabled={loading || !data.revisiInstruksi?.trim()}>{loading ? "⏳" : "🔄 Revisi Kesimpulan"}</Btn>
@@ -1051,24 +1023,25 @@ RULES:
   </>);
 
   const Step5 = () => (<>
-    <Card title="Abstrak" icon="📄" gold action={<Btn onClick={generateAbstrak} disabled={loading || !data.kesimpulan}>{loading ? "⏳" : "🤖 Generate"}</Btn>}><DTextarea value={data.abstrak} onCommit={v => upd("abstrak",v)} style={{ minHeight: 140 }} placeholder="Generate setelah pembahasan..." /></Card>
-    <Card title="Referensi (APA 7th)" icon="📚" gold>{!data.selectedRefs.length ? <p style={{ color: C.muted, fontSize: 12 }}>Step 2.</p> : data.selectedRefs.map((r, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11, color: C.text, marginBottom: 6, lineHeight: 1.6 }}><span style={{ fontSize: 9, color: tierColor(r.tier), fontWeight: 700, flexShrink: 0 }}>{tierBadge(r.tier)}</span><span style={{ paddingLeft: 16, textIndent: -16 }}>[{i+1}] {formatAPA(r)}</span></div>)}</Card>
+    <Card title="Abstrak" icon="📄" gold action={<Btn onClick={generateAbstrak} disabled={loading || !data.kesimpulan}>{loading ? "⏳" : "🤖 Generate"}</Btn>}><DTextarea value={data.abstrak} onCommit={v => upd("abstrak", v)} style={{ minHeight: 140 }} placeholder="Generate setelah pembahasan..." /></Card>
+    <Card title="Referensi (APA 7th)" icon="📚" gold>{!data.selectedRefs.length ? <p style={{ color: C.muted, fontSize: 12 }}>Step 2.</p> : data.selectedRefs.map((r, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 11, color: C.text, marginBottom: 6, lineHeight: 1.6 }}><span style={{ fontSize: 9, color: tierColor(r.tier), fontWeight: 700, flexShrink: 0 }}>{tierBadge(r.tier)}</span><span style={{ paddingLeft: 16, textIndent: -16 }}>[{i + 1}] {formatAPA(r)}</span></div>)}</Card>
     <Card title="Checklist" icon="✅" gold action={<ConfidenceBadge data={data} />}>
-      {[["Profil", !!(data.nama && data.nim && data.prodi && data.universitas)], ["Detail Praktikum", !!(data.mataKuliah && data.topikPraktikum && data.judulLaporan)], ["Pendahuluan", !!data.pendahuluan], ["Studi Pustaka", !!data.studiPustaka], ["Alat & Bahan", !!data.alatBahan], ["Prosedur", !!data.prosedur], ["Hasil", !!(data.hasilNaratif || (data.hasilTabels||[]).some(t => t.rows.some(r => r.some(c => c))))], ["Analisis", !data.enableAnalisis || (data.analisisBlocks||[]).some(b => b.hasil)], ["Pembahasan", !!data.pembahasan], ["Kesimpulan", !!data.kesimpulan], ["Abstrak", !!data.abstrak], ["Ref ≥ 3", data.selectedRefs.length >= 3]].map(([l, ok], i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, fontSize: 12 }}><span style={{ color: ok ? C.green : C.red }}>{ok ? "✅" : "❌"}</span><span style={{ color: ok ? C.text : C.muted }}>{l}</span></div>)}
+      {[["Profil", !!(data.nama && data.nim && data.prodi && data.universitas)], ["Detail Praktikum", !!(data.mataKuliah && data.topikPraktikum && data.judulLaporan)], ["Pendahuluan", !!data.pendahuluan], ["Studi Pustaka", !!data.studiPustaka], ["Alat & Bahan", !!data.alatBahan], ["Prosedur", !!data.prosedur], ["Hasil", !!(data.hasilNaratif || (data.hasilTabels || []).some(t => t.rows.some(r => r.some(c => c))))], ["Analisis", !data.enableAnalisis || (data.analisisBlocks || []).some(b => b.hasil)], ["Pembahasan", !!data.pembahasan], ["Kesimpulan", !!data.kesimpulan], ["Abstrak", !!data.abstrak], ["Ref ≥ 3", data.selectedRefs.length >= 3]].map(([l, ok], i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, fontSize: 12 }}><span style={{ color: ok ? C.green : C.red }}>{ok ? "✅" : "❌"}</span><span style={{ color: ok ? C.text : C.muted }}>{l}</span></div>)}
     </Card>
     <Card title="Export" icon="📥" gold>
       <p style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>Clean Report only — Working Sheet & Confidence Score TIDAK masuk .docx.</p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Btn variant="gold" onClick={generateDocx} disabled={exporting}>{exporting ? "⏳ Building .docx..." : "📥 Download .docx (Final)"}</Btn>
-        <Btn variant="ghost" onClick={() => { const t = [
-          `LAPORAN PRAKTIKUM\n${data.judulLaporan}`, `Mata Kuliah: ${data.mataKuliah}\nTanggal: ${data.tanggalPraktikum}`,
-          `\nABSTRAK\n${data.abstrak}`, `\nPENDAHULUAN\n${data.pendahuluan}`, `\nSTUDI PUSTAKA\n${data.studiPustaka}`,
-          `\nALAT & BAHAN\n${data.alatBahan}`, `\nPROSEDUR\n${data.prosedur}`, `\nHASIL\n${data.hasilNaratif}\n${tableToText()}`,
-          data.enableAnalisis ? `\nANALISIS\n${analisisCleanText()}` : "", `\nPEMBAHASAN\n${data.pembahasan}`, `\nKESIMPULAN\n${data.kesimpulan}`,
-          `\nREFERENSI\n${data.selectedRefs.map((r,i) => `[${i+1}] ${formatAPA(r)}`).join("\n")}` ].filter(Boolean).join("\n");
-          const b = new Blob([t], { type: "text/plain" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `Laprak_${data.topikPraktikum?.replace(/\s+/g,"_")||"draft"}.txt`; a.click(); URL.revokeObjectURL(u);
+        <Btn variant="ghost" onClick={() => {
+          const t = [
+            `LAPORAN PRAKTIKUM\n${data.judulLaporan}`, `Mata Kuliah: ${data.mataKuliah}\nTanggal: ${data.tanggalPraktikum}`,
+            `\nABSTRAK\n${data.abstrak}`, `\nPENDAHULUAN\n${data.pendahuluan}`, `\nSTUDI PUSTAKA\n${data.studiPustaka}`,
+            `\nALAT & BAHAN\n${data.alatBahan}`, `\nPROSEDUR\n${data.prosedur}`, `\nHASIL\n${data.hasilNaratif}\n${tableToText()}`,
+            data.enableAnalisis ? `\nANALISIS\n${analisisCleanText()}` : "", `\nPEMBAHASAN\n${data.pembahasan}`, `\nKESIMPULAN\n${data.kesimpulan}`,
+            `\nREFERENSI\n${data.selectedRefs.map((r, i) => `[${i + 1}] ${formatAPA(r)}`).join("\n")}`].filter(Boolean).join("\n");
+          const b = new Blob([t], { type: "text/plain" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `Laprak_${data.topikPraktikum?.replace(/\s+/g, "_") || "draft"}.txt`; a.click(); URL.revokeObjectURL(u);
         }}>📄 .txt</Btn>
-        <Btn variant="ghost" onClick={() => { const d = JSON.stringify(data, (k,v) => k === "fotoResults" ? [] : v, 2); const b = new Blob([d], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "laprak-v3-data.json"; a.click(); URL.revokeObjectURL(u); }}>💾 .json</Btn>
+        <Btn variant="ghost" onClick={() => { const d = JSON.stringify(data, (k, v) => k === "fotoResults" ? [] : v, 2); const b = new Blob([d], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "laprak-v3-data.json"; a.click(); URL.revokeObjectURL(u); }}>💾 .json</Btn>
       </div>
     </Card>
   </>);
@@ -1081,25 +1054,23 @@ RULES:
         <div style={{ flex: 1 }}><h1 style={{ fontSize: 17, fontWeight: 700, color: "#fff", margin: 0 }}>Laprak AI <span style={{ fontSize: 10, color: C.accent }}>V3.2</span></h1><p style={{ fontSize: 9, color: C.gold, margin: 0, letterSpacing: 1.5, textTransform: "uppercase" }}>Deterministic • HITL Agent • Moku</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {saved && <span style={{ fontSize: 10, color: C.green, background: "rgba(13,186,115,.1)", padding: "3px 8px", borderRadius: 10 }}>{saved}</span>}
-          <button onClick={() => setShowSettings(!showSettings)} style={{ background: "rgba(255,255,255,.08)", border: "none", color: C.muted, width: 30, height: 30, borderRadius: 12, cursor: "pointer", fontSize: 13 }}>⚙️</button>
         </div>
       </div>
-      {showSettings && <div style={{ background: C.card, borderBottom: `1px solid ${C.border}`, padding: "10px 20px" }}><label style={{ ...s.label, marginBottom: 4 }}>Gemini API Key</label><div style={{ display: "flex", gap: 6 }}><DInput style={{ flex: 1, fontFamily: "'JetBrains Mono'", fontSize: 11 }} type="password" value={apiKey} onCommit={v => saveApiKey(v)} placeholder="AIzaSy..." /><span style={{ fontSize: 10, color: apiKey ? C.green : C.red, alignSelf: "center" }}>{apiKey ? "✓" : "✕"}</span></div></div>}
       {loading && <div style={{ padding: "0 20px" }}><div style={{ height: 3, background: `linear-gradient(90deg, ${C.accent}, ${C.gold}, ${C.accent})`, backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 2 }} /><div style={{ textAlign: "center", fontSize: 11, color: C.accent, padding: "6px 0", animation: "pulse 1.5s infinite" }}>{loadingMsg}</div></div>}
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 14px" }}>
         <div style={{ display: "flex", gap: 4, marginBottom: 20, justifyContent: "center", flexWrap: "wrap" }}>
-          {[1,2,3,4,5].map(n => <div key={n} style={{ display: "flex", alignItems: "center", gap: 3 }}><div onClick={() => changeStep(n)} title={stepNames[n-1]} style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, cursor: "pointer", background: step === n ? C.accent : done[n-1] ? C.green : "rgba(255,255,255,.04)", color: step === n || done[n-1] ? "#fff" : C.muted, border: `2px solid ${step === n ? C.accent : done[n-1] ? C.green : C.border}`, boxShadow: step === n ? "0 0 12px rgba(45,127,249,.3)" : "none" }}>{n}</div>{n < 5 && <div style={{ width: 16, height: 2, background: done[n-1] ? C.green : C.border }} />}</div>)}
+          {[1, 2, 3, 4, 5].map(n => <div key={n} style={{ display: "flex", alignItems: "center", gap: 3 }}><div onClick={() => changeStep(n)} title={stepNames[n - 1]} style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, cursor: "pointer", background: step === n ? C.accent : done[n - 1] ? C.green : "rgba(255,255,255,.04)", color: step === n || done[n - 1] ? "#fff" : C.muted, border: `2px solid ${step === n ? C.accent : done[n - 1] ? C.green : C.border}`, boxShadow: step === n ? "0 0 12px rgba(45,127,249,.3)" : "none" }}>{n}</div>{n < 5 && <div style={{ width: 16, height: 2, background: done[n - 1] ? C.green : C.border }} />}</div>)}
         </div>
-        <div style={{ textAlign: "center", marginBottom: 18 }}><span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>{step}. {stepNames[step-1]}</span></div>
-        <div style={{ display: step === 2 ? "block" : "none" }}><RefManager selectedRefs={data.selectedRefs} onRefsChange={refs => upd("selectedRefs", refs)} apiKey={apiKey} /></div>
+        <div style={{ textAlign: "center", marginBottom: 18 }}><span style={{ fontSize: 13, fontWeight: 700, color: C.gold }}>{step}. {stepNames[step - 1]}</span></div>
+        <div style={{ display: step === 2 ? "block" : "none" }}><RefManager selectedRefs={data.selectedRefs} onRefsChange={refs => upd("selectedRefs", refs)} /></div>
         {step === 1 && Step1()}
         {step === 2 && Step2Rest()}
         {step === 3 && Step3()}
         {step === 4 && Step4()}
         {step === 5 && Step5()}
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18, paddingBottom: 30 }}>
-          <Btn variant="secondary" disabled={step === 1} onClick={() => changeStep(step-1)} style={{ opacity: step === 1 ? .3 : 1 }}>← Back</Btn>
-          {step < 5 ? <Btn onClick={() => changeStep(step+1)}>Next →</Btn> : <Btn variant="gold" disabled>Selesai ✓</Btn>}
+          <Btn variant="secondary" disabled={step === 1} onClick={() => changeStep(step - 1)} style={{ opacity: step === 1 ? .3 : 1 }}>← Back</Btn>
+          {step < 5 ? <Btn onClick={() => changeStep(step + 1)}>Next →</Btn> : <Btn variant="gold" disabled>Selesai ✓</Btn>}
         </div>
       </div>
     </div>

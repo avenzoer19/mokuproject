@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useTheme, useThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/components/AuthProvider";
 import MokuCreature from "@/components/MokuCreature";
 import { useRouter } from "next/navigation";
 
@@ -83,7 +84,15 @@ export default function LandingPage() {
   const t = useTheme();
   const toggle = useThemeToggle();
   const router = useRouter();
-  const login = () => router.push("/dashboard");
+  const { user, loading, signIn } = useAuth();
+
+  const handleLogin = () => {
+    if (user) {
+      router.push("/dashboard");
+    } else {
+      signIn();
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.text, transition: "background .3s", overflowX: "hidden" }}>
@@ -97,7 +106,18 @@ export default function LandingPage() {
           <a href="/about" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>About</a>
           <a href="/pricing" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>Pricing</a>
           <button onClick={toggle} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.bg2, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{t.mode === "dark" ? "🌙" : "☀️"}</button>
-          <button onClick={login} style={{ padding: "8px 20px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Masuk</button>
+          {!loading && user ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {user.user_metadata?.avatar_url ? (
+                <img src={user.user_metadata.avatar_url} alt="" style={{ width: 30, height: 30, borderRadius: 8, objectFit: "cover" }} referrerPolicy="no-referrer" />
+              ) : (
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg, ${t.amber}, ${t.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>{(user.user_metadata?.full_name || user.email || "U").charAt(0).toUpperCase()}</div>
+              )}
+              <button onClick={() => router.push("/dashboard")} style={{ padding: "8px 20px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Dashboard</button>
+            </div>
+          ) : (
+            <button onClick={handleLogin} style={{ padding: "8px 20px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Masuk</button>
+          )}
         </div>
       </nav>
 
@@ -129,7 +149,7 @@ export default function LandingPage() {
             </Fade>
             <Fade delay={.24}>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <button onClick={login} style={{ padding: "14px 28px", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", transition: "all .2s", boxShadow: `0 4px 20px ${t.primary}30` }}
+                <button onClick={handleLogin} style={{ padding: "14px 28px", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", transition: "all .2s", boxShadow: `0 4px 20px ${t.primary}30` }}
                   onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px) scale(1.02)"; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
                 >Mulai Belajar 🚀</button>
@@ -241,7 +261,7 @@ export default function LandingPage() {
               <MokuCreature size={90} glow level={5} />
               <h3 style={{ fontSize: 24, fontWeight: 900, marginTop: 12, marginBottom: 8 }}>Moku kecilmu udah nungguin</h3>
               <p style={{ fontSize: 14, color: t.sub, marginBottom: 24, lineHeight: 1.6 }}>Gratis. 2 detik sign up. Langsung belajar.</p>
-              <button onClick={login} style={{ padding: "13px 36px", borderRadius: 13, border: "none", background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 20px ${t.primary}30`, transition: "all .2s" }}
+              <button onClick={handleLogin} style={{ padding: "13px 36px", borderRadius: 13, border: "none", background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 20px ${t.primary}30`, transition: "all .2s" }}
                 onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)"; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
               >Mulai Sekarang ✨</button>

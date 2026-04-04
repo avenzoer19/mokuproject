@@ -1,5 +1,6 @@
 "use client";
 import { useTheme } from "@/components/ThemeProvider";
+import { useAuth } from "@/components/AuthProvider";
 import MokuCreature from "@/components/MokuCreature";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -7,9 +8,12 @@ import { useRouter } from "next/navigation";
 export default function DashboardHome() {
   const t = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const [msg, setMsg] = useState("Hai! Mau belajar apa hari ini? 📖");
   const msgs = ["Hai! Mau belajar apa hari ini? 📖","Aku lapar nih... feed aku ilmu dong! 🍕","Kamu belum study session hari ini lho~ 🧘","Ada modul baru? Upload yuk! 📚","Jangan lupa istirahat juga ya~ ☕"];
   useEffect(() => { const i = setInterval(() => setMsg(msgs[Math.floor(Math.random() * msgs.length)]), 8000); return () => clearInterval(i); }, []);
+
+  const firstName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "kamu";
 
   const QuickAction = ({ icon, label, desc, color, path }) => (
     <button onClick={() => router.push(path)} style={{ background: t.card, border: `2px solid ${t.border}`, borderRadius: 16, padding: "18px 16px", cursor: "pointer", transition: "all .2s", textAlign: "left", display: "flex", gap: 14, alignItems: "center", boxShadow: t.shadow, width: "100%" }}
@@ -24,21 +28,21 @@ export default function DashboardHome() {
   return (
     <div style={{ padding: "28px", maxWidth: 960, margin: "0 auto", animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, marginBottom: 4, letterSpacing: -.5 }}>Selamat datang! 👋</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 900, marginBottom: 4, letterSpacing: -.5 }}>Selamat datang, {firstName}! 👋</h1>
         <p style={{ fontSize: 14, color: t.sub }}>Moku-mu udah siap belajar bareng hari ini.</p>
       </div>
 
       {/* Moku widget */}
       <div style={{ background: t.card, border: `2px solid ${t.border}`, borderRadius: 20, padding: "20px", display: "flex", alignItems: "center", gap: 16, boxShadow: t.shadow, marginBottom: 20, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -20, right: -20, width: 100, height: 100, borderRadius: "50%", background: t.primaryBg, opacity: .4, pointerEvents: "none" }} />
-        <MokuCreature size={80} glow level={3} />
+        <MokuCreature size={80} glow level={1} />
         <div style={{ flex: 1, position: "relative", zIndex: 1 }}>
           <div style={{ background: t.bg2, border: `1.5px solid ${t.border}`, borderRadius: "4px 14px 14px 14px", padding: "10px 14px", fontSize: 13, color: t.sub, lineHeight: 1.6 }}>{msg}</div>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: t.amber, background: t.amberBg, padding: "3px 8px", borderRadius: 8, border: `1px solid ${t.amber}20` }}>Lv.3</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: t.amber, background: t.amberBg, padding: "3px 8px", borderRadius: 8, border: `1px solid ${t.amber}20` }}>Lv.1</div>
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ flex: 1, height: 5, background: t.bg3, borderRadius: 3, overflow: "hidden" }}><div style={{ width: "45%", height: "100%", background: `linear-gradient(90deg, ${t.primary}, ${t.teal})`, borderRadius: 3 }} /></div>
-              <span style={{ fontSize: 9, color: t.dim }}>45%</span>
+              <div style={{ flex: 1, height: 5, background: t.bg3, borderRadius: 3, overflow: "hidden" }}><div style={{ width: "0%", height: "100%", background: `linear-gradient(90deg, ${t.primary}, ${t.teal})`, borderRadius: 3 }} /></div>
+              <span style={{ fontSize: 9, color: t.dim }}>0%</span>
             </div>
           </div>
         </div>
@@ -46,7 +50,7 @@ export default function DashboardHome() {
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
-        {[{ icon: "🔥", val: "7", label: "Streak", color: "amber" }, { icon: "📄", val: "12", label: "Laporan", color: "primary" }, { icon: "📚", val: "5", label: "Modul", color: "teal" }, { icon: "⏱️", val: "4.2h", label: "Study", color: "pink" }].map((s, i) => (
+        {[{ icon: "🔥", val: "0", label: "Streak", color: "amber" }, { icon: "📄", val: "0", label: "Laporan", color: "primary" }, { icon: "📚", val: "0", label: "Modul", color: "teal" }, { icon: "⏱️", val: "0h", label: "Study", color: "pink" }].map((s, i) => (
           <div key={i} style={{ background: t.card, border: `1.5px solid ${t.border}`, borderRadius: 14, padding: "14px", textAlign: "center", boxShadow: t.shadow }}>
             <div style={{ fontSize: 14 }}>{s.icon}</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: t[s.color] }}>{s.val}</div>

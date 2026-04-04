@@ -1,17 +1,7 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
-
-async function callGemini(key, system, user) {
-  if (!key) return "Error: API Key belum diisi.";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-  try {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: `${system}\n\nUser:\n${user}` }] }] }) });
-    const d = await r.json();
-    if (d.error) return `Error: ${d.error.message}`;
-    return d.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Tidak ada respons.";
-  } catch (e) { return `Error: ${e.message}`; }
-}
+import { callGemini } from "@/lib/gemini";
 
 const DEMO_MODULES = [
   { id: "1", title: "Fisiologi Sel", subject: "Biofisika", summary: "Modul tentang struktur dan fungsi sel, membran sel, transport aktif dan pasif, serta signaling sel.", concepts: ["Membran Sel", "Difusi & Osmosis", "Transport Aktif", "Potensial Membran", "Signaling"] },
@@ -20,8 +10,7 @@ const DEMO_MODULES = [
 
 export default function ModulesPage() {
   const t = useTheme();
-  const [apiKey, setApiKey] = useState("");
-  const [modules, setModules] = useState(DEMO_MODULES);
+  const [modules] = useState(DEMO_MODULES);
   const [selectedModule, setSelectedModule] = useState(null);
   const [tab, setTab] = useState("overview");
 
@@ -40,21 +29,20 @@ export default function ModulesPage() {
   const modChats = chatMessages[selectedModule] || [];
 
   const sendChat = async (msg) => {
-    if (!msg.trim() || !apiKey) return;
+    if (!msg.trim()) return;
     const userMsg = { role: "user", text: msg };
     setChatMessages(p => ({ ...p, [selectedModule]: [...(p[selectedModule] || []), userMsg] }));
     setChatInput(""); setChatLoading(true);
     const sys = `Kamu adalah tutor AI bernama Moku. Kamu sedang membahas modul "${mod.title}" (${mod.subject}). Jawab dalam Bahasa Indonesia, ramah, dan helpful. Ringkasan modul: ${mod.summary}. Key concepts: ${mod.concepts.join(", ")}`;
-    const resp = await callGemini(apiKey, sys, msg);
+    const resp = await callGemini(sys, msg);
     setChatMessages(p => ({ ...p, [selectedModule]: [...(p[selectedModule] || []), { role: "moku", text: resp }] }));
     setChatLoading(false);
   };
 
   const generateQuiz = async () => {
-    if (!apiKey) return;
     setQuizLoading(true); setQuiz(null); setQuizAnswers({}); setQuizSubmitted(false);
     const sys = `Generate 5 soal pilihan ganda tentang "${mod.title}". Format: JSON array of objects with fields: "question", "options" (array of 4 strings), "correct" (index 0-3), "explanation". ONLY output the JSON array, no markdown.`;
-    const resp = await callGemini(apiKey, sys, `Topics: ${mod.concepts.join(", ")}. Summary: ${mod.summary}`);
+    const resp = await callGemini(sys, `Topics: ${mod.concepts.join(", ")}. Summary: ${mod.summary}`);
     try {
       const parsed = JSON.parse(resp.replace(/```json|```/g, "").trim());
       setQuiz(parsed);
@@ -73,12 +61,6 @@ export default function ModulesPage() {
       {/* Sidebar — Module list */}
       <div style={{ width: 240, flexShrink: 0 }}>
         <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 12 }}>📚 Modules</div>
-
-        {/* API Key */}
-        <div style={{ background: t.amberBg, border: `1px solid ${t.amber}20`, borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: t.amber, marginBottom: 4 }}>🔑 API Key</div>
-          <input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Gemini key..." type="password" style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: `1px solid ${t.amber}30`, background: t.card, color: t.text, fontSize: 10, outline: "none", fontFamily: "inherit" }} />
-        </div>
 
         {/* Module list */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -175,7 +157,7 @@ export default function ModulesPage() {
                     <div style={{ fontSize: 36, marginBottom: 12 }}>📝</div>
                     <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>Generate Latihan Soal</div>
                     <div style={{ fontSize: 12, color: t.dim, marginBottom: 16 }}>5 soal pilihan ganda dari modul {mod.title}</div>
-                    <button onClick={generateQuiz} disabled={quizLoading || !apiKey} style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: apiKey ? t.green : t.bg3, color: apiKey ? "#fff" : t.dim, fontSize: 14, fontWeight: 800, cursor: apiKey ? "pointer" : "default" }}>{quizLoading ? "Generating..." : "Generate Quiz 🧠"}</button>
+                    <button onClick={generateQuiz} disabled={quizLoading} style={{ padding: "10px 28px", borderRadius: 12, border: "none", background: t.green, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{quizLoading ? "Generating..." : "Generate Quiz 🧠"}</button>
                   </div>
                 ) : (
                   <div>
