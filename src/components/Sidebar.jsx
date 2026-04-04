@@ -1,7 +1,7 @@
 "use client";
 import { useTheme, useThemeToggle } from "./ThemeProvider";
+import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
 
 const NAV = [
   { path: "/dashboard", icon: "🏠", label: "Home" },
@@ -19,13 +19,17 @@ const BOTTOM = [
   { path: "/dashboard/settings", icon: "⚙️", label: "Settings" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed, setCollapsed }) {
   const t = useTheme();
   const toggle = useThemeToggle();
+  const { user, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
   const w = collapsed ? 68 : 220;
+
+  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const initials = displayName.charAt(0).toUpperCase();
 
   const NavBtn = ({ item }) => {
     const isActive = pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"));
@@ -85,11 +89,20 @@ export default function Sidebar() {
           display: "flex", alignItems: "center", gap: 10, padding: collapsed ? "8px" : "10px 12px",
           marginTop: 4, borderRadius: 12, background: t.bg3, justifyContent: collapsed ? "center" : "flex-start",
         }}>
-          <div style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${t.amber}, ${t.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>R</div>
-          {!collapsed && <div style={{ overflow: "hidden" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: t.text, whiteSpace: "nowrap" }}>Rifqi</div>
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, objectFit: "cover" }} referrerPolicy="no-referrer" />
+          ) : (
+            <div style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${t.amber}, ${t.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>{initials}</div>
+          )}
+          {!collapsed && <div style={{ overflow: "hidden", flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{displayName}</div>
             <div style={{ fontSize: 10, color: t.dim, whiteSpace: "nowrap" }}>Free Plan</div>
           </div>}
+          {!collapsed && (
+            <button onClick={(e) => { e.stopPropagation(); signOut(); router.push("/"); }} style={{
+              background: "none", border: "none", color: t.dim, cursor: "pointer", fontSize: 14, padding: 4,
+            }} title="Sign out">↪</button>
+          )}
         </div>
       </div>
     </div>

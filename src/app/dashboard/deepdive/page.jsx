@@ -1,17 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
-
-async function callGemini(key, system, user) {
-  if (!key) return "Error: API Key belum diisi.";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-  try {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: `${system}\n\nUser:\n${user}` }] }] }) });
-    const d = await r.json();
-    if (d.error) return `Error: ${d.error.message}`;
-    return d.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Tidak ada respons.";
-  } catch (e) { return `Error: ${e.message}`; }
-}
+import { callGemini } from "@/lib/gemini";
 
 const SKELETON = [
   { id: "abstrak", title: "Abstrak", icon: "📋", desc: "Ringkasan seluruh laporan: latar belakang, tujuan, metode, hasil, kesimpulan." },
@@ -26,7 +16,6 @@ const SKELETON = [
 
 export default function DeepDivePage() {
   const t = useTheme();
-  const [apiKey, setApiKey] = useState("");
   const [tab, setTab] = useState("why");
   const [loading, setLoading] = useState(false);
 
@@ -47,22 +36,22 @@ export default function DeepDivePage() {
   // ============ WHY THIS RESULT ============
   const askWhy = async (q) => {
     const question = q || whyQuestion;
-    if (!question.trim() || !apiKey) return;
+    if (!question.trim()) return;
     setLoading(true);
     const sys = "Kamu adalah dosen ilmu alam yang menjelaskan reasoning ilmiah di balik hasil percobaan. Jawab dalam Bahasa Indonesia, jelas, dan mendalam. Gunakan analogi jika membantu.";
-    const resp = await callGemini(apiKey, sys, `${whyContext ? `Konteks percobaan: ${whyContext}\n\n` : ""}Pertanyaan: ${question}`);
+    const resp = await callGemini(sys, `${whyContext ? `Konteks percobaan: ${whyContext}\n\n` : ""}Pertanyaan: ${question}`);
     setWhyAnswer(resp); setLoading(false);
   };
 
   // ============ REASONING SIMULATOR ============
   const sendReason = async (msg) => {
     const m = msg || reasonInput;
-    if (!m.trim() || !apiKey) return;
+    if (!m.trim()) return;
     setReasonChats(p => [...p, { role: "user", text: m }]);
     setReasonInput(""); setLoading(true);
     const history = reasonChats.map(c => `${c.role === "user" ? "Student" : "Tutor"}: ${c.text}`).join("\n");
     const sys = `Kamu adalah tutor sains bernama Moku. Kamu sedang berdiskusi tentang "${reasonTopic || "sains"}". Gayamu: Socratic method — pancing mahasiswa berpikir, jangan langsung kasih jawaban. Tanya balik, beri petunjuk, baru jelaskan. Bahasa Indonesia, ramah, encouraging.`;
-    const resp = await callGemini(apiKey, sys, `${history}\nStudent: ${m}`);
+    const resp = await callGemini(sys, `${history}\nStudent: ${m}`);
     setReasonChats(p => [...p, { role: "moku", text: resp }]);
     setLoading(false);
   };
@@ -71,7 +60,7 @@ export default function DeepDivePage() {
   const explainSection = async (section) => {
     setSelectedSection(section); setSkeletonAnswer(""); setLoading(true);
     const sys = "Kamu adalah dosen pembimbing laporan praktikum. Jelaskan setiap bagian laporan dengan detail: apa isinya, kenapa penting, kesalahan umum, tips menulis yang baik. Bahasa Indonesia.";
-    const resp = await callGemini(apiKey, sys, `Jelaskan bagian "${section.title}" dalam laporan praktikum:\n${section.desc}\n\nBerikan:\n1. Apa yang harus ada di bagian ini\n2. Kenapa bagian ini penting\n3. Kesalahan umum mahasiswa\n4. Tips menulis yang baik\n5. Contoh kalimat pembuka yang bagus`);
+    const resp = await callGemini(sys, `Jelaskan bagian "${section.title}" dalam laporan praktikum:\n${section.desc}\n\nBerikan:\n1. Apa yang harus ada di bagian ini\n2. Kenapa bagian ini penting\n3. Kesalahan umum mahasiswa\n4. Tips menulis yang baik\n5. Contoh kalimat pembuka yang bagus`);
     setSkeletonAnswer(resp); setLoading(false);
   };
 
@@ -84,12 +73,6 @@ export default function DeepDivePage() {
           <h1 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>🔍 Deep Dive</h1>
           <p style={{ fontSize: 11, color: t.dim, margin: 0 }}>Pahami, bukan cuma hafal</p>
         </div>
-      </div>
-
-      {/* API Key */}
-      <div style={{ background: t.amberBg, border: `1.5px solid ${t.amber}20`, borderRadius: 14, padding: "10px 16px", marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
-        <span>🔑</span>
-        <input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Gemini API Key..." type="password" style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${t.amber}30`, background: t.card, color: t.text, fontSize: 12, outline: "none", fontFamily: "inherit" }} />
       </div>
 
       {/* Tabs */}
@@ -150,11 +133,11 @@ export default function DeepDivePage() {
           <div style={{ width: 200, flexShrink: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📋 Struktur Laprak</div>
             {SKELETON.map(sec => (
-              <button key={sec.id} onClick={() => apiKey && explainSection(sec)} style={{
+              <button key={sec.id} onClick={() => explainSection(sec)} style={{
                 display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, width: "100%",
                 border: `1.5px solid ${selectedSection?.id === sec.id ? t.primary + "40" : t.border}`,
                 background: selectedSection?.id === sec.id ? t.primaryBg : t.card,
-                cursor: apiKey ? "pointer" : "default", textAlign: "left", marginBottom: 4, transition: "all .15s",
+                cursor: "pointer", textAlign: "left", marginBottom: 4, transition: "all .15s",
               }}>
                 <span style={{ fontSize: 14 }}>{sec.icon}</span>
                 <span style={{ fontSize: 11, fontWeight: selectedSection?.id === sec.id ? 800 : 600, color: selectedSection?.id === sec.id ? t.primary : t.text }}>{sec.title}</span>

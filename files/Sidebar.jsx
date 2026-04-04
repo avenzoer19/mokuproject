@@ -84,7 +84,7 @@ export default function Sidebar() {
       <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 8 }}>
         <div style={{ height: 1, background: t.border, margin: "0 6px 8px" }} />
         {BOTTOM.map(item => <NavBtn key={item.path} item={item} />)}
-        
+
         {/* Theme toggle */}
         <button onClick={toggle} style={{
           display: "flex", alignItems: "center", gap: 10, padding: collapsed ? "10px" : "9px 12px",
