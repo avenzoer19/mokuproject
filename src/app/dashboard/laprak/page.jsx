@@ -646,7 +646,7 @@ RULES:
   const generateDocx = async () => {
     setExporting(true);
     try {
-      const dx = await import("https://cdn.jsdelivr.net/npm/docx@9.1.1/+esm");
+      const dx = await import("docx");
       const { Document: Doc, Packer: Pkr, Paragraph: P, TextRun: T, Table: Tbl, TableRow: TR, TableCell: TC, 
         ImageRun: IR, Header: Hdr, Footer: Ftr, AlignmentType: A, HeadingLevel: HL, Math: Mt, MathRun: MR,
         BorderStyle: BS, WidthType: W, ShadingType: ST, PageNumber: PN, SectionType: SecT } = dx;
