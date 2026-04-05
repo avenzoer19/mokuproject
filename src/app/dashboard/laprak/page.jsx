@@ -440,6 +440,24 @@ export default function LaprakAI() {
       setSaved("✓"); setTimeout(() => setSaved(""), 1200);
     } catch { }
   }, []);
+
+  // Auto-save on every data change (debounced 800ms) — user never loses work
+  const autoSaveTimer = useRef(null);
+  const [autoSaved, setAutoSaved] = useState(false);
+  useEffect(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      try {
+        const o = { ...data };
+        delete o.fotoResults;
+        if (o.selectedRefs) o.selectedRefs = o.selectedRefs.map(r => { const { pdfData, ...rest } = r; return rest; });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
+        setAutoSaved(true); setTimeout(() => setAutoSaved(false), 1500);
+      } catch { }
+    }, 800);
+    return () => clearTimeout(autoSaveTimer.current);
+  }, [data]);
+
   const changeStep = useCallback((n) => { saveToStorage(); setStep(n); }, [saveToStorage]);
   const upd = useCallback((k, v) => { setData(prev => ({ ...prev, [k]: v })); }, []);
   const handlePhoto = (e) => { Array.from(e.target.files).forEach(f => { const r = new FileReader(); r.onload = ev => { setData(prev => ({ ...prev, fotoResults: [...prev.fotoResults, { name: f.name, type: f.type, data: ev.target.result.split(",")[1], preview: ev.target.result }] })); }; r.readAsDataURL(f); }); };
@@ -1053,6 +1071,7 @@ RULES:
         <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #7c5ce7, #00bfa6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#fff', fontWeight: 900 }}>M</div>
         <div style={{ flex: 1 }}><h1 style={{ fontSize: 17, fontWeight: 700, color: "#fff", margin: 0 }}>Laprak AI <span style={{ fontSize: 10, color: C.accent }}>V3.2</span></h1><p style={{ fontSize: 9, color: C.gold, margin: 0, letterSpacing: 1.5, textTransform: "uppercase" }}>Deterministic • HITL Agent • Moku</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {autoSaved && <span style={{ fontSize: 9, color: C.green, opacity: .8 }}>● tersimpan</span>}
           {saved && <span style={{ fontSize: 10, color: C.green, background: "rgba(13,186,115,.1)", padding: "3px 8px", borderRadius: 10 }}>{saved}</span>}
         </div>
       </div>
