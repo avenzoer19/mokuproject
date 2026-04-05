@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { useTheme, useThemeToggle } from "./ThemeProvider";
 import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
@@ -26,6 +27,7 @@ export default function Sidebar({ collapsed, setCollapsed }) {
   const pathname = usePathname();
   const router = useRouter();
   const w = collapsed ? 68 : 220;
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
   const avatarUrl = user?.user_metadata?.avatar_url;
@@ -99,12 +101,27 @@ export default function Sidebar({ collapsed, setCollapsed }) {
             <div style={{ fontSize: 10, color: t.dim, whiteSpace: "nowrap" }}>Free Plan</div>
           </div>}
           {!collapsed && (
-            <button onClick={(e) => { e.stopPropagation(); signOut(); router.push("/"); }} style={{
+            <button onClick={(e) => { e.stopPropagation(); setConfirmLogout(true); }} style={{
               background: "none", border: "none", color: t.dim, cursor: "pointer", fontSize: 14, padding: 4,
             }} title="Sign out">↪</button>
           )}
         </div>
       </div>
+
+      {/* Logout confirm modal */}
+      {confirmLogout && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setConfirmLogout(false)}>
+          <div style={{ background: t.card, border: `1.5px solid ${t.border}`, borderRadius: 20, padding: "28px 28px 22px", width: 300, boxShadow: t.shadow, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>👋</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 6 }}>Yakin mau keluar?</div>
+            <div style={{ fontSize: 12, color: t.sub, marginBottom: 22 }}>Moku akan menunggumu kembali.</div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button onClick={() => setConfirmLogout(false)} style={{ padding: "9px 20px", borderRadius: 11, border: `1.5px solid ${t.border}`, background: t.bg2, color: t.sub, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Batal</button>
+              <button onClick={() => { signOut(); router.push("/"); }} style={{ padding: "9px 20px", borderRadius: 11, border: "none", background: t.red, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Logout</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -93,7 +93,7 @@ export default function AboutPage() {
         <Fade delay={.15}>
           <div style={{ textAlign: "center", marginBottom: 50, background: `linear-gradient(135deg, ${t.primaryBg}, ${t.tealBg}, ${t.pinkBg})`, border: `2px solid ${t.primary}15`, borderRadius: 28, padding: "48px 32px", position: "relative", overflow: "hidden" }}>
             <MokuCreature size={100} glow expression="excited" level={10} />
-            <h2 style={{ fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 900, marginTop: 20, marginBottom: 16, lineHeight: 1.2, background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+            <h2 key={t.mode} style={{ fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 900, marginTop: 20, marginBottom: 16, lineHeight: 1.2, background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", color: "transparent" }}>
               &ldquo;Study must be fun<br />for everyone.&rdquo;
             </h2>
             <p style={{ fontSize: 15, color: t.sub, lineHeight: 1.85, maxWidth: 440, margin: "0 auto" }}>Ini bukan slogan. Ini keyakinan yang nge-drive setiap pixel, setiap fitur, setiap keputusan di Moku.</p>

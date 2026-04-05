@@ -5,25 +5,20 @@ import MokuCreature from "@/components/MokuCreature";
 
 const DAYS = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
 const DEMO = {
-  streak: 7, totalMinutes: 420, sessions: 14, modulesRead: 3, questionsAnswered: 47, lapraksGenerated: 2, mokuLevel: 5, mokuXP: 680,
-  heatmap: [0,1,0,2,3,2,0,1,2,3,2,1,0,0,1,3,4,3,2,1,2,3,4,3,2,3,4,3],
-  weeklyMinutes: [45, 60, 30, 90, 75, 0, 120],
+  streak: 0, totalMinutes: 0, sessions: 0, modulesRead: 0, questionsAnswered: 0, lapraksGenerated: 0, mokuLevel: 1, mokuXP: 0,
+  heatmap: Array(28).fill(0),
+  weeklyMinutes: [0, 0, 0, 0, 0, 0, 0],
   achievements: [
-    { icon: "🔥", name: "7-Day Streak", desc: "Belajar 7 hari berturut-turut", unlocked: true },
-    { icon: "📄", name: "First Laprak", desc: "Generate laporan pertama", unlocked: true },
-    { icon: "📚", name: "Bookworm", desc: "Upload 3 modul", unlocked: true },
-    { icon: "🧠", name: "Quiz Master", desc: "Jawab 50 soal (47/50)", unlocked: false },
-    { icon: "🌙", name: "Night Owl", desc: "Study session setelah jam 10 malam", unlocked: true },
-    { icon: "⚡", name: "Power Hour", desc: "Study session 60 menit penuh", unlocked: true },
-    { icon: "🏆", name: "Centurion", desc: "Kumpulkan 1000 XP (680/1000)", unlocked: false },
-    { icon: "🐉", name: "Moku Legendary", desc: "Reach Moku Level 20 (5/20)", unlocked: false },
+    { icon: "🔥", name: "7-Day Streak", desc: "Belajar 7 hari berturut-turut", unlocked: false },
+    { icon: "📄", name: "First Laprak", desc: "Generate laporan pertama", unlocked: false },
+    { icon: "📚", name: "Bookworm", desc: "Upload 3 modul", unlocked: false },
+    { icon: "🧠", name: "Quiz Master", desc: "Jawab 50 soal", unlocked: false },
+    { icon: "🌙", name: "Night Owl", desc: "Study session setelah jam 10 malam", unlocked: false },
+    { icon: "⚡", name: "Power Hour", desc: "Study session 60 menit penuh", unlocked: false },
+    { icon: "🏆", name: "Centurion", desc: "Kumpulkan 1000 XP", unlocked: false },
+    { icon: "🐉", name: "Moku Legendary", desc: "Reach Moku Level 20", unlocked: false },
   ],
-  topSubjects: [
-    { name: "Bioinstrumentasi", minutes: 150, color: "primary" },
-    { name: "Biofisika", minutes: 120, color: "teal" },
-    { name: "Fisika Medis", minutes: 90, color: "pink" },
-    { name: "Fisiologi", minutes: 60, color: "amber" },
-  ],
+  topSubjects: [],
 };
 
 export default function ReportPage() {
@@ -35,7 +30,7 @@ export default function ReportPage() {
   const totalWeek = DEMO.weeklyMinutes.reduce((a, b) => a + b, 0);
   const avgDay = Math.round(totalWeek / 7);
   const heatColors = ["transparent", t.primary + "25", t.primary + "50", t.primary + "80", t.primary];
-  const mokuVerdict = DEMO.streak >= 7 ? "🔥 Minggu yang luar biasa! Streak 7 hari — Moku bangga! Tetap konsisten ya!" : "📖 Coba tingkatkan konsistensi minggu depan!";
+  const mokuVerdict = DEMO.streak === 0 ? "👋 Halo! Ini minggu pertamamu. Mulai belajar dan Moku akan tumbuh bersamamu!" : DEMO.streak >= 7 ? "🔥 Minggu yang luar biasa! Streak 7 hari — Moku bangga! Tetap konsisten ya!" : "📖 Coba tingkatkan konsistensi minggu depan!";
 
   return (
     <div style={{ padding: "20px 16px", maxWidth: 700, margin: "0 auto" }}>

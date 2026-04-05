@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useTheme, useThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/components/AuthProvider";
+import { useRouter } from "next/navigation";
 
 const TIERS = [
   { id:"free", name:"Free", price:0, priceStr:"Gratis", period:"", emoji:"🌱", color:"teal", desc:"Coba semua fitur Moku",
@@ -30,14 +32,21 @@ const ROWS = [
 export default function PricingPage() {
   const t = useTheme();
   const toggle = useThemeToggle();
+  const { user } = useAuth();
+  const router = useRouter();
 
   return (
     <div style={{ minHeight:"100vh", background:t.bg, color:t.text, transition:"background .3s" }}>
       <div style={{ padding:"14px 24px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <a href="/" style={{ display:"flex", alignItems:"center", gap:8, textDecoration:"none" }}>
-          <div style={{ width:30, height:30, borderRadius:8, background:"linear-gradient(135deg,#7c5ce7,#00bfa6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:900, color:"#fff" }}>M</div>
-          <span style={{ fontSize:15, fontWeight:800, color:t.text }}>moku</span>
-        </a>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <a href="/" style={{ display:"flex", alignItems:"center", gap:8, textDecoration:"none" }}>
+            <div style={{ width:30, height:30, borderRadius:8, background:"linear-gradient(135deg,#7c5ce7,#00bfa6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:900, color:"#fff" }}>M</div>
+            <span style={{ fontSize:15, fontWeight:800, color:t.text }}>moku</span>
+          </a>
+          {user && (
+            <button onClick={() => router.push("/dashboard")} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:10, border:`1.5px solid ${t.border}`, background:t.bg2, color:t.sub, fontSize:12, fontWeight:700, cursor:"pointer" }}>← Dashboard</button>
+          )}
+        </div>
         <button onClick={toggle} style={{ width:32, height:32, borderRadius:8, border:`1.5px solid ${t.border}`, background:t.bg2, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>{t.mode==="dark"?"🌙":"☀️"}</button>
       </div>
 

@@ -138,7 +138,7 @@ export default function LandingPage() {
               <h1 style={{ fontSize: "clamp(36px, 5.5vw, 58px)", fontWeight: 900, lineHeight: 1.06, marginBottom: 16, letterSpacing: -2 }}>
                 <span>Belajar itu seru,</span><br />
                 <span>kalau ada </span>
-                <span style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Moku</span>
+                <span key={t.mode} style={{ background: `linear-gradient(135deg, ${t.primary}, ${t.teal})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", color: "transparent" }}>Moku</span>
                 <span style={{ display: "inline-block", animation: "wiggle 2s ease-in-out infinite", fontSize: "clamp(30px, 4vw, 48px)" }}> ✨</span>
               </h1>
             </Fade>

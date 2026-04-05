@@ -6,21 +6,13 @@ const DAYS = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
 const MONTHS = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 const typeIcon = { deadline: "🔴", study: "📚", session: "🧘", quiz: "📝", other: "📌" };
 
-const DEMO_TASKS = [
-  { id: 1, title: "Laprak Biokompatibilitas", type: "deadline", date: new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0], done: false, color: "red" },
-  { id: 2, title: "Baca Modul Fisiologi Sel", type: "study", date: new Date().toISOString().split("T")[0], done: false, color: "teal" },
-  { id: 3, title: "Study Session 30 menit", type: "session", date: new Date().toISOString().split("T")[0], done: true, color: "amber" },
-  { id: 4, title: "Latihan Soal Bioinstrumentasi", type: "quiz", date: new Date(Date.now() + 86400000).toISOString().split("T")[0], done: false, color: "green" },
-  { id: 5, title: "Praktikum Fisika Medis", type: "deadline", date: new Date(Date.now() + 86400000 * 5).toISOString().split("T")[0], done: false, color: "pink" },
-  { id: 6, title: "Review Deep Dive EIT", type: "study", date: new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0], done: false, color: "primary" },
-];
 
 export default function PlannerPage() {
   const t = useTheme();
   const today = new Date();
   const todayStr = today.toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [tasks, setTasks] = useState(DEMO_TASKS);
+  const [tasks, setTasks] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", type: "study", date: todayStr });
   const [viewMode, setViewMode] = useState("week");
