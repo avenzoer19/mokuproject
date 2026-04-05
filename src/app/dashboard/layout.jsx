@@ -4,13 +4,15 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export default function DashboardLayout({ children }) {
   const t = useTheme();
   const { user, loading } = useAuth();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const sidebarW = collapsed ? 68 : 220;
+  const mobile = useIsMobile(768);
+  const sidebarW = mobile ? 0 : (collapsed ? 68 : 220);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -34,7 +36,12 @@ export default function DashboardLayout({ children }) {
   return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.text, transition: "background .3s, color .3s" }}>
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
-      <div style={{ marginLeft: sidebarW, minHeight: "100vh", transition: "margin-left .3s cubic-bezier(.4,0,.2,1)" }}>
+      <div style={{
+        marginLeft: sidebarW,
+        minHeight: "100vh",
+        paddingBottom: mobile ? 68 : 0,
+        transition: "margin-left .3s cubic-bezier(.4,0,.2,1)",
+      }}>
         {children}
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useTheme, useThemeToggle } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import MokuCreature from "@/components/MokuCreature";
 import { useRouter } from "next/navigation";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 // ============ SCROLL FADE ============
 const useFade = (threshold = 0.12) => {
@@ -131,6 +132,7 @@ export default function LandingPage() {
   const toggle = useThemeToggle();
   const router = useRouter();
   const { user, loading, signIn } = useAuth();
+  const mobile = useIsMobile(768);
 
   const handleLogin = () => {
     if (user) {
@@ -143,14 +145,14 @@ export default function LandingPage() {
   return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.text, transition: "background .3s", overflowX: "hidden" }}>
       {/* Nav */}
-      <nav style={{ padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 10 }}>
+      <nav style={{ padding: mobile ? "10px 16px" : "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg, #7c5ce7, #00bfa6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#fff" }}>M</div>
           <span style={{ fontSize: 17, fontWeight: 800, color: t.text }}>moku</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/about" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>About</a>
-          <a href="/pricing" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>Pricing</a>
+        <div style={{ display: "flex", alignItems: "center", gap: mobile ? 8 : 16 }}>
+          {!mobile && <a href="/about" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>About</a>}
+          {!mobile && <a href="/pricing" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>Pricing</a>}
           <button onClick={toggle} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.bg2, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{t.mode === "dark" ? "🌙" : "☀️"}</button>
           {!loading && user ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -159,16 +161,16 @@ export default function LandingPage() {
               ) : (
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: `linear-gradient(135deg, ${t.amber}, ${t.pink})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>{(user.user_metadata?.full_name || user.email || "U").charAt(0).toUpperCase()}</div>
               )}
-              <button onClick={() => router.push("/dashboard")} style={{ padding: "8px 20px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Dashboard</button>
+              <button onClick={() => router.push("/dashboard")} style={{ padding: "8px 16px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Dashboard</button>
             </div>
           ) : (
-            <button onClick={handleLogin} style={{ padding: "8px 20px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Masuk</button>
+            <button onClick={handleLogin} style={{ padding: "8px 16px", borderRadius: 10, background: t.primary, color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Masuk</button>
           )}
         </div>
       </nav>
 
       {/* Hero */}
-      <section style={{ position: "relative", padding: "60px 28px 40px", overflow: "hidden" }}>
+      <section style={{ position: "relative", padding: mobile ? "24px 16px 32px" : "60px 28px 40px", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: "5%", right: "10%", width: 350, height: 350, borderRadius: "50%", background: t.primaryBg, opacity: .6, animation: "blob1 12s ease-in-out infinite", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "10%", left: "5%", width: 280, height: 280, borderRadius: "50%", background: t.tealBg, opacity: .5, animation: "blob2 15s ease-in-out infinite", pointerEvents: "none" }} />
 
@@ -220,7 +222,7 @@ export default function LandingPage() {
       <Marquee />
 
       {/* Playground section */}
-      <section id="playground" style={{ padding: "80px 28px", position: "relative" }}>
+      <section id="playground" style={{ padding: mobile ? "48px 16px" : "80px 28px", position: "relative" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Fade>
             <div style={{ textAlign: "center", marginBottom: 48 }}>
@@ -239,7 +241,7 @@ export default function LandingPage() {
       </section>
 
       {/* Evolution Showcase */}
-      <section style={{ padding: "60px 28px 40px" }}>
+      <section style={{ padding: mobile ? "40px 16px 32px" : "60px 28px 40px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Fade>
             <div style={{ textAlign: "center", marginBottom: 40 }}>
@@ -247,7 +249,7 @@ export default function LandingPage() {
               <p style={{ fontSize: 14, color: t.sub, marginTop: 8 }}>Setiap sesi belajar = XP untuk Moku. Makin tinggi level, makin wow tampilannya.</p>
             </div>
           </Fade>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: mobile ? 10 : 16 }}>
             {[
               { stage: "baby",      lv: 1,  locked: false, desc: "Blob imut yang baru lahir. Lucu tapi masih polos." },
               { stage: "teen",      lv: 6,  locked: false, desc: "Tanduk muncul! Moku mulai punya aura & wing buds." },
@@ -268,7 +270,7 @@ export default function LandingPage() {
                       </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                      <MokuCreature size={100} glow={!locked} expression="happy" level={lv} />
+                      <MokuCreature size={mobile ? 80 : 100} glow={!locked} expression="happy" level={lv} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 800, color: info.color, marginBottom: 2 }}>{info.emoji} {info.label}</div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: t.dim, marginBottom: 6 }}>{info.range}</div>
@@ -282,10 +284,10 @@ export default function LandingPage() {
       </section>
 
       {/* Features — bento */}
-      <section style={{ padding: "60px 28px 80px" }}>
+      <section style={{ padding: mobile ? "40px 16px 60px" : "60px 28px 80px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <Fade><h2 style={{ fontSize: 32, fontWeight: 900, textAlign: "center", marginBottom: 40, letterSpacing: -1 }}>Satu tempat untuk <span style={{ color: t.primary }}>semuanya</span></h2></Fade>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <Fade><h2 style={{ fontSize: mobile ? 24 : 32, fontWeight: 900, textAlign: "center", marginBottom: 32, letterSpacing: -1 }}>Satu tempat untuk <span style={{ color: t.primary }}>semuanya</span></h2></Fade>
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 12 }}>
             <Fade delay={.05} style={{ gridColumn: "1 / -1" }}>
               <div style={{ background: t.primaryBg, border: `2px solid ${t.primary}20`, borderRadius: 22, padding: "32px 28px", display: "flex", alignItems: "center", gap: 28, boxShadow: t.shadow, flexWrap: "wrap", cursor: "default", transition: "all .25s" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = t.primary + "50"}
@@ -318,7 +320,7 @@ export default function LandingPage() {
       </section>
 
       {/* How it works — chat style */}
-      <section style={{ padding: "60px 28px 80px", background: t.bg2 }}>
+      <section style={{ padding: mobile ? "40px 16px 60px" : "60px 28px 80px", background: t.bg2 }}>
         <div style={{ maxWidth: 600, margin: "0 auto" }}>
           <Fade><h2 style={{ fontSize: 28, fontWeight: 900, textAlign: "center", marginBottom: 36, letterSpacing: -.5 }}>Gimana caranya? 🤔</h2></Fade>
           {[
