@@ -17,6 +17,7 @@ const NAV = [
 ];
 
 const BOTTOM = [
+  { path: "/about", icon: "💡", label: "About" },
   { path: "/pricing", icon: "💰", label: "Pricing" },
   { path: "/dashboard/settings", icon: "⚙️", label: "Settings" },
 ];

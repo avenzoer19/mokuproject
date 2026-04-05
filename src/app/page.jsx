@@ -153,6 +153,7 @@ export default function LandingPage() {
         <div style={{ display: "flex", alignItems: "center", gap: mobile ? 8 : 16 }}>
           {!mobile && <a href="/about" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>About</a>}
           {!mobile && <a href="/pricing" style={{ color: t.sub, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>Pricing</a>}
+          {mobile && <a href="/about" style={{ color: t.sub, textDecoration: "none", fontSize: 12, fontWeight: 600 }}>About</a>}
           <button onClick={toggle} style={{ width: 32, height: 32, borderRadius: 8, border: `1.5px solid ${t.border}`, background: t.bg2, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>{t.mode === "dark" ? "🌙" : "☀️"}</button>
           {!loading && user ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
