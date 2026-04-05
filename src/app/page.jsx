@@ -21,6 +21,14 @@ const Fade = ({ children, delay = 0, style = {} }) => {
   return <div ref={ref} style={{ opacity: vis ? 1 : 0, transform: vis ? "translateY(0)" : "translateY(28px)", transition: `opacity .6s ease ${delay}s, transform .6s ease ${delay}s`, ...style }}>{children}</div>;
 };
 
+// stage labels
+const STAGE_INFO = {
+  baby:      { label: "Baby",      emoji: "🐣", color: "#7c5ce7", range: "Lv 1–5" },
+  teen:      { label: "Teen",      emoji: "🌱", color: "#00bfa6", range: "Lv 6–10" },
+  prince:    { label: "Prince",    emoji: "🔥", color: "#f4511e", range: "Lv 11–15" },
+  legendary: { label: "Legendary", emoji: "⭐", color: "#ffb300", range: "Lv 16–20" },
+};
+
 // ============ MOKU PLAYGROUND ============
 function MokuPlayground() {
   const t = useTheme();
@@ -28,28 +36,66 @@ function MokuPlayground() {
   const [level, setLevel] = useState(1);
   const [fed, setFed] = useState(0);
   const [showMsg, setShowMsg] = useState("");
+  const [locked, setLocked] = useState(false);
+
+  const DEMO_CAP = 6; // show up to Teen in demo
+
   const feed = () => {
-    setFed(p => p + 1); setExp("excited");
-    const msgs = ["Nyam! 📖","Knowledge +1!","Moku suka!","Otak makin encer~","Yeay ilmu baru!"];
-    setShowMsg(msgs[Math.floor(Math.random() * msgs.length)]);
+    if (locked) return;
+    const nextFed = fed + 1;
+    const nextLevel = (nextFed % 3 === 0 && level < DEMO_CAP) ? level + 1 : level;
+    setFed(nextFed); setExp("excited");
+    if (nextLevel > level) {
+      setShowMsg(nextLevel >= DEMO_CAP ? "Moku jadi Teen! 🌱✨" : `Level up! ${nextLevel} 🎉`);
+      if (nextLevel >= DEMO_CAP) setTimeout(() => setLocked(true), 2000);
+    } else {
+      const msgs = ["Nyam! 📖", "Knowledge +1!", "Moku suka! 💜", "Otak makin encer~", "Yeay ilmu baru!"];
+      setShowMsg(msgs[Math.floor(Math.random() * msgs.length)]);
+    }
+    setLevel(nextLevel);
     setTimeout(() => setExp("happy"), 1200);
-    setTimeout(() => setShowMsg(""), 1800);
-    if ((fed + 1) % 3 === 0 && level < 20) setLevel(l => l + 1);
+    setTimeout(() => setShowMsg(""), 2200);
   };
+
+  const stage = level <= 5 ? "baby" : "teen";
+  const stageInfo = STAGE_INFO[stage];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative" }}>
-      <div style={{ background: t.card, border: `2px solid ${t.border}`, borderRadius: 16, padding: "8px 16px", fontSize: 14, fontWeight: 700, color: t.primary, opacity: showMsg ? 1 : 0, transform: showMsg ? "translateY(0) scale(1)" : "translateY(8px) scale(.9)", transition: "all .3s cubic-bezier(.34,1.56,.64,1)", position: "absolute", top: -16, boxShadow: t.shadow, whiteSpace: "nowrap", pointerEvents: "none" }}>{showMsg || "..."}<div style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%) rotate(45deg)", width: 10, height: 10, background: t.card, borderRight: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }} /></div>
+      {/* Speech bubble */}
+      <div style={{
+        background: t.card, border: `2px solid ${t.border}`, borderRadius: 16, padding: "8px 16px",
+        fontSize: 14, fontWeight: 700, color: t.primary,
+        opacity: showMsg ? 1 : 0, transform: showMsg ? "translateY(0) scale(1)" : "translateY(8px) scale(.9)",
+        transition: "all .3s cubic-bezier(.34,1.56,.64,1)", position: "absolute", top: -16,
+        boxShadow: t.shadow, whiteSpace: "nowrap", pointerEvents: "none",
+      }}>{showMsg || "..."}<div style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%) rotate(45deg)", width: 10, height: 10, background: t.card, borderRight: `2px solid ${t.border}`, borderBottom: `2px solid ${t.border}` }} /></div>
+
       <MokuCreature size={220} glow expression={exp} level={level} />
+
+      {/* Stage badge + XP bar */}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: t.amber, background: t.amberBg, padding: "4px 10px", borderRadius: 20, border: `1px solid ${t.amber}25` }}>Lv.{level}</div>
-        <div style={{ width: 80, height: 6, background: t.bg3, borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${((fed % 3) / 3) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${t.primary}, ${t.teal})`, borderRadius: 3, transition: "width .4s cubic-bezier(.34,1.56,.64,1)" }} /></div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: stageInfo.color, background: stageInfo.color + "18", padding: "4px 10px", borderRadius: 20, border: `1px solid ${stageInfo.color}30` }}>{stageInfo.emoji} {stageInfo.label} Lv.{level}</div>
+        <div style={{ width: 80, height: 6, background: t.bg3, borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ width: `${((fed % 3) / 3) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${stageInfo.color}, ${stageInfo.color}bb)`, borderRadius: 3, transition: "width .4s cubic-bezier(.34,1.56,.64,1)" }} />
+        </div>
         <span style={{ fontSize: 10, color: t.dim }}>{fed % 3}/3</span>
       </div>
-      <button onClick={feed} style={{ padding: "10px 24px", borderRadius: 12, border: `2px solid ${t.primary}30`, background: t.primaryBg, color: t.primary, fontSize: 14, fontWeight: 700, cursor: "pointer", transition: "all .2s" }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.background = t.primary; e.currentTarget.style.color = "#fff"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = t.primaryBg; e.currentTarget.style.color = t.primary; }}
-      >📚 Feed Moku</button>
-      <p style={{ fontSize: 11, color: t.dim, textAlign: "center", maxWidth: 200, lineHeight: 1.5 }}>Klik untuk kasih makan! 3x feed = level up</p>
+
+      {locked ? (
+        <div style={{ textAlign: "center", padding: "12px 20px", background: t.bg2, borderRadius: 14, border: `1.5px dashed ${t.border}`, maxWidth: 260 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>🔒 Prince & Legendary</div>
+          <div style={{ fontSize: 11, color: t.dim, lineHeight: 1.5 }}>Evolusi selanjutnya hanya bisa dicapai lewat belajar beneran di dalam app. Siap? 🚀</div>
+        </div>
+      ) : (
+        <button onClick={feed} style={{ padding: "10px 24px", borderRadius: 12, border: `2px solid ${t.primary}30`, background: t.primaryBg, color: t.primary, fontSize: 14, fontWeight: 700, cursor: "pointer", transition: "all .2s" }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.background = t.primary; e.currentTarget.style.color = "#fff"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.background = t.primaryBg; e.currentTarget.style.color = t.primary; }}
+        >📚 Feed Moku</button>
+      )}
+      <p style={{ fontSize: 11, color: t.dim, textAlign: "center", maxWidth: 220, lineHeight: 1.5 }}>
+        {locked ? "Daftar gratis untuk lanjutkan evolusi! ✨" : "3x feed = level up. Sampai Teen di sini!"}
+      </p>
     </div>
   );
 }
@@ -189,6 +235,49 @@ export default function LandingPage() {
               <MokuPlayground />
             </div>
           </Fade>
+        </div>
+      </section>
+
+      {/* Evolution Showcase */}
+      <section style={{ padding: "60px 28px 40px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <Fade>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <h2 style={{ fontSize: 28, fontWeight: 900, letterSpacing: -1 }}>Moku tumbuh bersamamu 🐣→⭐</h2>
+              <p style={{ fontSize: 14, color: t.sub, marginTop: 8 }}>Setiap sesi belajar = XP untuk Moku. Makin tinggi level, makin wow tampilannya.</p>
+            </div>
+          </Fade>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+            {[
+              { stage: "baby",      lv: 1,  locked: false, desc: "Blob imut yang baru lahir. Lucu tapi masih polos." },
+              { stage: "teen",      lv: 6,  locked: false, desc: "Tanduk muncul! Moku mulai punya aura & wing buds." },
+              { stage: "prince",    lv: 11, locked: true,  desc: "Sayap melebar, tanduk membara. Moku makin epik." },
+              { stage: "legendary", lv: 16, locked: true,  desc: "Crown of fire, golden eyes, aura legendaris. 🔥" },
+            ].map(({ stage, lv, locked, desc }, i) => {
+              const info = STAGE_INFO[stage];
+              return (
+                <Fade key={stage} delay={i * .08}>
+                  <div style={{ background: t.card, border: `2px solid ${locked ? t.border : info.color + "35"}`, borderRadius: 20, padding: "20px 14px", textAlign: "center", boxShadow: t.shadow, position: "relative", overflow: "hidden", transition: "transform .2s", cursor: "default" }}
+                    onMouseEnter={e => { if (!locked) e.currentTarget.style.transform = "translateY(-4px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = ""; }}>
+                    {locked && (
+                      <div style={{ position: "absolute", inset: 0, background: t.mode === "dark" ? "rgba(0,0,0,.55)" : "rgba(255,255,255,.6)", backdropFilter: "blur(6px)", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 18 }}>
+                        <div style={{ fontSize: 22, marginBottom: 4 }}>🔒</div>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: t.sub }}>Unlock di app</div>
+                        <div style={{ fontSize: 10, color: t.dim, marginTop: 2 }}>Belajar beneran!</div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                      <MokuCreature size={100} glow={!locked} expression="happy" level={lv} />
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: info.color, marginBottom: 2 }}>{info.emoji} {info.label}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: t.dim, marginBottom: 6 }}>{info.range}</div>
+                    <div style={{ fontSize: 11, color: t.sub, lineHeight: 1.5 }}>{desc}</div>
+                  </div>
+                </Fade>
+              );
+            })}
+          </div>
         </div>
       </section>
 
