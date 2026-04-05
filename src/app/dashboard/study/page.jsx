@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { addXp, loadMokuState, getLevel, getMokuStage } from "@/lib/mokuState";
 
 // ============ INTERACTIVE MOKU ============
 function MokuInteractive({ size = 160, state = "idle", progress = 0 }) {
@@ -152,7 +153,7 @@ export default function StudyPage() {
   const [phase, setPhase] = useState("idle");
   const [breakTime] = useState(5 * 60);
   const intervalRef = useRef(null);
-  const [xp, setXp] = useState(0);
+  const [xp, setXp] = useState(() => { try { return loadMokuState().xp || 0; } catch { return 0; } });
   const [sessionsToday, setSessionsToday] = useState(0);
   const [totalMinutes, setTotalMinutes] = useState(0);
   const [feedCount, setFeedCount] = useState(0);
@@ -171,7 +172,10 @@ export default function StudyPage() {
             if (phase === "focus") {
               setPhase("done"); setMokuState("done");
               const earned = Math.round(duration / 60) * 2;
-              setXp(p => p + earned); setSessionsToday(p => p + 1); setTotalMinutes(p => p + Math.round(duration / 60)); setFeedCount(p => p + 1);
+              const newSessions = sessionsToday + 1;
+              const newMinutes = totalMinutes + Math.round(duration / 60);
+              const saved = addXp(earned, { sessionsCompleted: newSessions, totalMinutes: newMinutes });
+              setXp(saved.xp); setSessionsToday(newSessions); setTotalMinutes(newMinutes); setFeedCount(p => p + 1);
               say(`Yeay! 🎉 Sesi selesai! +${earned} XP`, 6000); setRunning(false);
             } else if (phase === "break") {
               setPhase("idle"); setMokuState("idle"); say("Break selesai! Mau lanjut? 💪"); setRunning(false);
@@ -249,13 +253,24 @@ export default function StudyPage() {
         </div>
 
         {/* Level bar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: t.amber }}>Lv.{Math.floor(feedCount / 3) + 1}</span>
-          <div style={{ width: 100, height: 5, background: t.bg3, borderRadius: 3, overflow: "hidden" }}>
-            <div style={{ width: `${((feedCount % 3) / 3) * 100}%`, height: "100%", background: `linear-gradient(90deg, ${t.primary}, ${t.teal})`, borderRadius: 3, transition: "width .5s cubic-bezier(.34,1.56,.64,1)" }} />
-          </div>
-          <span style={{ fontSize: 9, color: t.dim }}>{feedCount % 3}/3</span>
-        </div>
+        {(() => {
+          const lv = getLevel(xp);
+          const stage = getMokuStage(lv);
+          const stageEmoji = { baby: "🐣", teen: "🌱", prince: "🔥", legendary: "⭐" }[stage];
+          const base = [0,50,120,220,350,520,740,1020,1360,1760,2260,2860,3560,4360,5260,6260,7360,8560,9860,11260];
+          const cur = xp - (base[lv-1] || 0);
+          const needed = lv < 20 ? (base[lv] - base[lv-1]) : 1;
+          const pct = Math.min(100, Math.round((cur / needed) * 100));
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: t.amber }}>{stageEmoji} Lv.{lv}</span>
+              <div style={{ width: 100, height: 5, background: t.bg3, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: `linear-gradient(90deg, ${t.primary}, ${t.teal})`, borderRadius: 3, transition: "width .5s cubic-bezier(.34,1.56,.64,1)" }} />
+              </div>
+              <span style={{ fontSize: 9, color: t.dim }}>{cur}/{needed}</span>
+            </div>
+          );
+        })()}
 
         {/* Controls */}
         {phase === "idle" && (
