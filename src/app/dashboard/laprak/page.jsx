@@ -5,6 +5,24 @@ import { callGemini, searchCrossRef } from "@/lib/gemini";
 
 // ============ CONSTANTS ============
 const STORAGE_KEY = "laprak-ai-v3";
+const HISTORY_KEY = "laprak-history";
+
+export function saveLaprakToHistory(data) {
+  try {
+    const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    const entry = {
+      id: Date.now().toString(),
+      savedAt: new Date().toISOString(),
+      title: data.judulLaporan || data.topikPraktikum || "Laprak tanpa judul",
+      mataKuliah: data.mataKuliah || "",
+      tanggal: data.tanggalPraktikum || "",
+      snippet: data.pendahuluan?.substring(0, 200) || "",
+      data: { ...data, fotoResults: [] },
+    };
+    const updated = [entry, ...history.filter(h => h.id !== entry.id)].slice(0, 20);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  } catch { }
+}
 const UNAIR_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWCAIAAACzY+a1AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAACpLklEQVR42u";
 const PROFILE_DEFAULT = { nama: "", nim: "", kelompok: "", kelas: "", prodi: "", fakultas: "", universitas: "", tahun: "2026" };
 const C_LIGHT = { navy: "#7c5ce7", gold: "#f0a030", bg: "#fffcf7", card: "#ffffff", card2: "#faf5ec", border: "#ede5d5", input: "#ffffff", inputB: "#ddd6c8", text: "#1b1622", muted: "#665e72", accent: "#7c5ce7", accent2: "#9f8df7", green: "#22c980", yellow: "#f0a030", red: "#e94560", white: "#1b1622" };
@@ -419,6 +437,8 @@ export default function LaprakAI() {
   });
   const [saved, setSaved] = useState("");
   const [warnings, setWarnings] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState([]);
   const fileRef = useRef(null);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
@@ -426,7 +446,8 @@ export default function LaprakAI() {
   // Load
   useEffect(() => {
     (async () => {
-      try { const r = (() => { const v = localStorage.getItem(STORAGE_KEY); return v ? { value: v } : null; })(); if (r?.value) { setData(prev => ({ ...prev, ...JSON.parse(r.value) })); setSaved("Loaded"); setTimeout(() => setSaved(""), 2000); } } catch { }
+      try { const r = localStorage.getItem(STORAGE_KEY); if (r) { setData(prev => ({ ...prev, ...JSON.parse(r) })); setSaved("Loaded"); setTimeout(() => setSaved(""), 2000); } } catch { }
+      try { const h = localStorage.getItem(HISTORY_KEY); if (h) setHistory(JSON.parse(h)); } catch { }
     })();
   }, []);
 
@@ -434,10 +455,28 @@ export default function LaprakAI() {
     try {
       const o = { ...(d || dataRef.current) };
       delete o.fotoResults;
-      // Strip any pdfData from refs to keep storage lean
       if (o.selectedRefs) o.selectedRefs = o.selectedRefs.map(r => { const { pdfData, ...rest } = r; return rest; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
       setSaved("✓"); setTimeout(() => setSaved(""), 1200);
+    } catch { }
+  }, []);
+
+  const saveToHistory = useCallback(() => {
+    try {
+      const o = { ...dataRef.current, fotoResults: [] };
+      if (o.selectedRefs) o.selectedRefs = o.selectedRefs.map(r => { const { pdfData, ...rest } = r; return rest; });
+      const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      const entry = {
+        id: Date.now().toString(),
+        savedAt: new Date().toISOString(),
+        title: o.judulLaporan || o.topikPraktikum || "Laprak tanpa judul",
+        mataKuliah: o.mataKuliah || "",
+        tanggal: o.tanggalPraktikum || "",
+        snippet: o.pendahuluan?.substring(0, 200) || "",
+        data: o,
+      };
+      localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...history].slice(0, 20)));
+      setSaved("Saved to history ✓"); setTimeout(() => setSaved(""), 2000);
     } catch { }
   }, []);
   const changeStep = useCallback((n) => { saveToStorage(); setStep(n); }, [saveToStorage]);
@@ -1054,8 +1093,39 @@ RULES:
         <div style={{ flex: 1 }}><h1 style={{ fontSize: 17, fontWeight: 700, color: "#fff", margin: 0 }}>Laprak AI <span style={{ fontSize: 10, color: C.accent }}>V3.2</span></h1><p style={{ fontSize: 9, color: C.gold, margin: 0, letterSpacing: 1.5, textTransform: "uppercase" }}>Deterministic • HITL Agent • Moku</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {saved && <span style={{ fontSize: 10, color: C.green, background: "rgba(13,186,115,.1)", padding: "3px 8px", borderRadius: 10 }}>{saved}</span>}
+          <button onClick={saveToHistory} style={{ background: "rgba(255,255,255,.08)", border: "none", color: C.text, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8 }} title="Simpan ke History">💾 Simpan</button>
+          <button onClick={() => { setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]")); setShowHistory(true); }} style={{ background: "rgba(255,255,255,.08)", border: "none", color: C.text, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8 }}>📂 History</button>
         </div>
       </div>
+
+      {/* History Modal */}
+      {showHistory && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowHistory(false)}>
+          <div style={{ background: C.card, border: `1.5px solid ${C.border}`, borderRadius: 20, padding: 24, width: 480, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: C.text }}>📂 Laprak History</span>
+              <button onClick={() => setShowHistory(false)} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            {history.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13 }}>Belum ada history. Klik 💾 Simpan setelah mengisi laprak.</div>
+            ) : history.map(h => (
+              <div key={h.id} style={{ padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.border}`, marginBottom: 8, background: C.card2 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: C.text }}>{h.title}</div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{h.mataKuliah} • {new Date(h.savedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</div>
+                    {h.snippet && <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.5 }}>{h.snippet.substring(0, 100)}...</div>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginLeft: 10 }}>
+                    <button onClick={() => { setData(prev => ({ ...prev, ...h.data })); setShowHistory(false); setSaved("Loaded ✓"); setTimeout(() => setSaved(""), 1500); }} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${C.accent}`, background: C.accent + "15", color: C.accent, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Buka</button>
+                    <button onClick={() => { const upd = history.filter(x => x.id !== h.id); setHistory(upd); localStorage.setItem(HISTORY_KEY, JSON.stringify(upd)); }} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${C.red}20`, background: "transparent", color: C.red, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Hapus</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {loading && <div style={{ padding: "0 20px" }}><div style={{ height: 3, background: `linear-gradient(90deg, ${C.accent}, ${C.gold}, ${C.accent})`, backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 2 }} /><div style={{ textAlign: "center", fontSize: 11, color: C.accent, padding: "6px 0", animation: "pulse 1.5s infinite" }}>{loadingMsg}</div></div>}
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 14px" }}>
         <div style={{ display: "flex", gap: 4, marginBottom: 20, justifyContent: "center", flexWrap: "wrap" }}>
