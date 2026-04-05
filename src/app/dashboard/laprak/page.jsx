@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { useRouter } from "next/navigation";
 import { callGemini, searchCrossRef } from "@/lib/gemini";
 
 // ============ CONSTANTS ============
@@ -399,6 +400,7 @@ JSON format:
 export default function LaprakAI() {
   const __t = useTheme();
   C = __t.mode === "dark" ? C_DARK : C_LIGHT;
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
@@ -420,6 +422,39 @@ export default function LaprakAI() {
   const [saved, setSaved] = useState("");
   const [warnings, setWarnings] = useState([]);
   const fileRef = useRef(null);
+
+  // ── History (simpan & buka laprak sebelumnya) ──
+  const HISTORY_KEY = "laprak-history";
+  const [history, setHistory] = useState(() => { try { const r = localStorage.getItem(HISTORY_KEY); return r ? JSON.parse(r) : []; } catch { return []; } });
+  const [showHistory, setShowHistory] = useState(false);
+
+  const saveToHistory = useCallback(() => {
+    const d = dataRef.current;
+    const entry = {
+      id: Date.now().toString(),
+      savedAt: new Date().toISOString(),
+      title: d.judulLaporan || d.topikPraktikum || "Laprak tanpa judul",
+      mataKuliah: d.mataKuliah || "",
+      snippet: (d.pendahuluan || "").substring(0, 180),
+      data: { ...d, fotoResults: [] },
+    };
+    const updated = [entry, ...history].slice(0, 20);
+    setHistory(updated);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    setSaved("💾 Tersimpan!"); setTimeout(() => setSaved(""), 2000);
+  }, [history]);
+
+  const loadFromHistory = useCallback((entry) => {
+    setData(prev => ({ ...prev, ...entry.data }));
+    setShowHistory(false);
+    setSaved("📂 Dimuat!"); setTimeout(() => setSaved(""), 2000);
+  }, []);
+
+  const deleteHistory = useCallback((id) => {
+    const updated = history.filter(h => h.id !== id);
+    setHistory(updated);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  }, [history]);
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -1061,6 +1096,10 @@ RULES:
         }}>📄 .txt</Btn>
         <Btn variant="ghost" onClick={() => { const d = JSON.stringify(data, (k, v) => k === "fotoResults" ? [] : v, 2); const b = new Blob([d], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "laprak-v3-data.json"; a.click(); URL.revokeObjectURL(u); }}>💾 .json</Btn>
       </div>
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+        <p style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Punya pertanyaan lanjutan tentang laprak ini? Bawa ke Deep Dive untuk analisis lebih dalam.</p>
+        <Btn variant="primary" onClick={() => { saveToHistory(); router.push("/dashboard/deepdive"); }}>🔍 Lanjut ke Deep Dive →</Btn>
+      </div>
     </Card>
   </>);
 
@@ -1073,8 +1112,43 @@ RULES:
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {autoSaved && <span style={{ fontSize: 9, color: C.green, opacity: .8 }}>● tersimpan</span>}
           {saved && <span style={{ fontSize: 10, color: C.green, background: "rgba(13,186,115,.1)", padding: "3px 8px", borderRadius: 10 }}>{saved}</span>}
+          <button onClick={() => setShowHistory(true)} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>📂 {history.length > 0 ? history.length : ""}</button>
+          <button onClick={saveToHistory} style={{ padding: "5px 10px", borderRadius: 8, border: `1px solid ${C.accent}40`, background: C.accent + "15", color: C.accent, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>💾 Simpan</button>
         </div>
       </div>
+
+      {/* History modal */}
+      {showHistory && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setShowHistory(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 20, padding: 20, width: "100%", maxWidth: 480, maxHeight: "70vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,.4)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>📂 History Laprak</span>
+              <button onClick={() => setShowHistory(false)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.muted }}>✕</button>
+            </div>
+            {history.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 13 }}>Belum ada laprak tersimpan.<br />Klik 💾 Simpan untuk menyimpan.</div>
+            ) : (
+              <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                {history.map(entry => (
+                  <div key={entry.id} style={{ background: C.card2, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.title}</div>
+                        <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>{entry.mataKuliah} · {new Date(entry.savedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                        {entry.snippet && <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{entry.snippet}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => loadFromHistory(entry)} style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Buka</button>
+                        <button onClick={() => deleteHistory(entry.id)} style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 11, cursor: "pointer" }}>✕</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {loading && <div style={{ padding: "0 20px" }}><div style={{ height: 3, background: `linear-gradient(90deg, ${C.accent}, ${C.gold}, ${C.accent})`, backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite", borderRadius: 2 }} /><div style={{ textAlign: "center", fontSize: 11, color: C.accent, padding: "6px 0", animation: "pulse 1.5s infinite" }}>{loadingMsg}</div></div>}
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "20px 14px" }}>
         <div style={{ display: "flex", gap: 4, marginBottom: 20, justifyContent: "center", flexWrap: "wrap" }}>
