@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { loadMokuState, saveMokuState, getLevel, getMokuStage, getMokuColors } from "@/lib/mokuState";
 
 // ============ ROOM DATA ============
 const WALLPAPERS = [
@@ -35,54 +36,89 @@ const ACCESSORIES = [
 ];
 
 // ============ MOKU IN ROOM ============
-function MokuRoom({ size = 110, accessory = "none" }) {
+const ROOM_SPEECHES = [
+  "Halo! Senang kamu berkunjung~ 💜",
+  "Ruanganku makin keren nih! ✨",
+  "Mau belajar bareng? 📚",
+  "Terima kasih udah didekorasi! 🏡",
+  "Aku udah siap belajar lagi! 🔥",
+  "Kamu terbaik! 💪",
+  "Yuk tambah furniture baru~ 🛒",
+];
+
+function MokuRoom({ size = 110, accessory = "none", level = 1, onSpeech }) {
   const [frame, setFrame] = useState(0);
   const [blink, setBlink] = useState(false);
+  const [petted, setPetted] = useState(false);
+  const [hearts, setHearts] = useState([]);
+
   useEffect(() => {
     const f = setInterval(() => setFrame(p => (p + 1) % 80), 70);
     const b = setInterval(() => { setBlink(true); setTimeout(() => setBlink(false), 150); }, 3500 + Math.random() * 2000);
     return () => { clearInterval(f); clearInterval(b); };
   }, []);
+
+  const handleClick = () => {
+    setPetted(true);
+    const id = Date.now();
+    setHearts(p => [...p, { id, x: 30 + Math.random() * 40, y: 5 + Math.random() * 20 }]);
+    setTimeout(() => setPetted(false), 600);
+    setTimeout(() => setHearts(p => p.filter(h => h.id !== id)), 1400);
+    if (onSpeech) onSpeech(ROOM_SPEECHES[Math.floor(Math.random() * ROOM_SPEECHES.length)]);
+  };
+
   const breathe = Math.sin(frame * .1) * 2;
   const wobble = Math.sin(frame * .06) * 1;
-  const eyeH = blink ? .5 : 8;
+  const squish = petted ? 1.06 : 1;
+  const eyeH = blink ? .5 : petted ? 10 : 8;
+  const colors = getMokuColors(level);
   const id = `mr${size}`;
+
   return (
-    <svg width={size} height={size} viewBox="0 0 200 200" style={{ filter: "drop-shadow(0 4px 12px rgba(108,92,231,.25))" }}>
-      <defs>
-        <radialGradient id={`b${id}`} cx="50%" cy="36%" r="54%"><stop offset="0%" stopColor="#9b8df7" /><stop offset="50%" stopColor="#7c6cf7" /><stop offset="100%" stopColor="#5e40c8" /></radialGradient>
-        <filter id={`g${id}`}><feGaussianBlur stdDeviation="2.5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-      </defs>
-      <g transform={`translate(${wobble},${breathe})`}>
-        <ellipse cx="100" cy="150" rx="38" ry="8" fill="#7c6cf7" opacity=".08" />
-        <ellipse cx="100" cy="108" rx={50 + breathe * .3} ry={45 - breathe * .2} fill={`url(#b${id})`} />
-        <ellipse cx="100" cy="118" rx="26" ry="18" fill="#9f8df7" opacity=".2" />
-        <ellipse cx="74" cy="70" rx="6.5" ry="11" fill="#9b8df7" opacity=".8" transform="rotate(-12 74 70)" />
-        <ellipse cx="126" cy="70" rx="6.5" ry="11" fill="#9b8df7" opacity=".8" transform="rotate(12 126 70)" />
-        <ellipse cx="74" cy="65" rx="4" ry="6" fill="#2dd4bf" opacity=".5" transform="rotate(-12 74 65)" filter={`url(#g${id})`} />
-        <ellipse cx="126" cy="65" rx="4" ry="6" fill="#2dd4bf" opacity=".5" transform="rotate(12 126 65)" filter={`url(#g${id})`} />
-        <ellipse cx="85" cy="98" rx="8.5" ry={eyeH} fill="#fff" style={{ transition: "ry .12s" }} />
-        <ellipse cx="115" cy="98" rx="8.5" ry={eyeH} fill="#fff" style={{ transition: "ry .12s" }} />
-        {!blink && <>
-          <ellipse cx="87" cy="98" rx="4" ry="4.5" fill="#1a1230" />
-          <ellipse cx="117" cy="98" rx="4" ry="4.5" fill="#1a1230" />
-          <circle cx="88" cy="95.5" r="1.6" fill="#fff" />
-          <circle cx="118" cy="95.5" r="1.6" fill="#fff" />
-        </>}
-        <ellipse cx="72" cy="108" rx="6" ry="4" fill="#f25d9c" opacity=".12" />
-        <ellipse cx="128" cy="108" rx="6" ry="4" fill="#f25d9c" opacity=".12" />
-        <path d="M 90 112 Q 100 120 110 112" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />
-        {[{ cx: 66, cy: 108, c: "#2dd4bf" }, { cx: 134, cy: 103, c: "#fb7fbe" }, { cx: 84, cy: 128, c: "#fbbf24" }].map((s, i) => (
-          <circle key={i} cx={s.cx} cy={s.cy} r="2.2" fill={s.c} opacity={(.25 + Math.sin(frame * .06 + i) * .25).toFixed(2)} filter={`url(#g${id})`} />
-        ))}
-        <path d={`M 146 118 Q ${158 + Math.sin(frame * .08) * 3} 112 160 102`} stroke="#9b8df7" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-        {accessory === "glasses" && <text x="100" y="92" fontSize="18" textAnchor="middle">🤓</text>}
-        {accessory === "hat" && <text x="100" y="60" fontSize="22" textAnchor="middle">🎓</text>}
-        {accessory === "crown" && <text x="100" y="58" fontSize="20" textAnchor="middle">👑</text>}
-        {accessory === "headphones" && <text x="100" y="80" fontSize="18" textAnchor="middle">🎧</text>}
-        {accessory === "scarf" && <text x="100" y="128" fontSize="16" textAnchor="middle">🧣</text>}
-      </g>
-    </svg>
+    <div style={{ position: "relative", cursor: "pointer", display: "inline-block" }} onClick={handleClick}>
+      {hearts.map(h => (
+        <div key={h.id} style={{ position: "absolute", left: `${h.x}%`, top: `${h.y}%`, fontSize: 18, pointerEvents: "none", animation: "heartFloat 1.2s ease forwards", zIndex: 10 }}>💜</div>
+      ))}
+      <svg width={size} height={size} viewBox="0 0 200 200" style={{ filter: `drop-shadow(0 4px 12px ${colors.glow}40)`, transform: `scale(${squish})`, transition: "transform .2s" }}>
+        <defs>
+          <radialGradient id={`b${id}`} cx="50%" cy="36%" r="54%">
+            <stop offset="0%" stopColor={colors.c1} />
+            <stop offset="50%" stopColor={colors.c2} />
+            <stop offset="100%" stopColor={colors.c3} />
+          </radialGradient>
+          <filter id={`g${id}`}><feGaussianBlur stdDeviation="2.5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+        </defs>
+        <g transform={`translate(${wobble},${breathe})`}>
+          <ellipse cx="100" cy="150" rx="38" ry="8" fill={colors.c2} opacity=".08" />
+          <ellipse cx="100" cy="108" rx={50 + breathe * .3} ry={45 - breathe * .2} fill={`url(#b${id})`} />
+          <ellipse cx="100" cy="118" rx="26" ry="18" fill={colors.c1} opacity=".2" />
+          <ellipse cx="74" cy="70" rx="6.5" ry="11" fill={colors.c1} opacity=".8" transform="rotate(-12 74 70)" />
+          <ellipse cx="126" cy="70" rx="6.5" ry="11" fill={colors.c1} opacity=".8" transform="rotate(12 126 70)" />
+          <ellipse cx="74" cy="65" rx="4" ry="6" fill="#2dd4bf" opacity=".5" transform="rotate(-12 74 65)" filter={`url(#g${id})`} />
+          <ellipse cx="126" cy="65" rx="4" ry="6" fill="#2dd4bf" opacity=".5" transform="rotate(12 126 65)" filter={`url(#g${id})`} />
+          <ellipse cx="85" cy="98" rx="8.5" ry={eyeH} fill="#fff" style={{ transition: "ry .12s" }} />
+          <ellipse cx="115" cy="98" rx="8.5" ry={eyeH} fill="#fff" style={{ transition: "ry .12s" }} />
+          {!blink && <>
+            <ellipse cx="87" cy="98" rx="4" ry="4.5" fill="#1a1230" />
+            <ellipse cx="117" cy="98" rx="4" ry="4.5" fill="#1a1230" />
+            <circle cx="88" cy="95.5" r="1.6" fill="#fff" />
+            <circle cx="118" cy="95.5" r="1.6" fill="#fff" />
+          </>}
+          <ellipse cx="72" cy="108" rx="6" ry="4" fill="#f25d9c" opacity={petted ? ".3" : ".12"} />
+          <ellipse cx="128" cy="108" rx="6" ry="4" fill="#f25d9c" opacity={petted ? ".3" : ".12"} />
+          <path d={petted ? "M 86 112 Q 100 126 114 112" : "M 90 112 Q 100 120 110 112"} stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />
+          {[{ cx: 66, cy: 108, c: "#2dd4bf" }, { cx: 134, cy: 103, c: "#fb7fbe" }, { cx: 84, cy: 128, c: "#fbbf24" }].map((s, i) => (
+            <circle key={i} cx={s.cx} cy={s.cy} r="2.2" fill={s.c} opacity={(.25 + Math.sin(frame * .06 + i) * .25).toFixed(2)} filter={`url(#g${id})`} />
+          ))}
+          <path d={`M 146 118 Q ${158 + Math.sin(frame * .08) * 3} 112 160 102`} stroke={colors.c1} strokeWidth="3.5" fill="none" strokeLinecap="round" />
+          {accessory === "glasses" && <text x="100" y="92" fontSize="18" textAnchor="middle">🤓</text>}
+          {accessory === "hat" && <text x="100" y="60" fontSize="22" textAnchor="middle">🎓</text>}
+          {accessory === "crown" && <text x="100" y="58" fontSize="20" textAnchor="middle">👑</text>}
+          {accessory === "headphones" && <text x="100" y="80" fontSize="18" textAnchor="middle">🎧</text>}
+          {accessory === "scarf" && <text x="100" y="128" fontSize="16" textAnchor="middle">🧣</text>}
+        </g>
+      </svg>
+    </div>
   );
 }
 
@@ -102,7 +138,8 @@ function Stars() {
 // ============ MAIN ============
 export default function RoomPage() {
   const t = useTheme();
-  const [xp, setXp] = useState(350);
+  const [xp, setXp] = useState(() => { try { return loadMokuState().xp || 0; } catch { return 0; } });
+  const [roomSpeech, setRoomSpeech] = useState("Selamat datang di kamarku! 🏡");
   const [wallpaper, setWallpaper] = useState(WALLPAPERS[0]);
   const [ownedWalls, setOwnedWalls] = useState(["default"]);
   const [placedFurniture, setPlacedFurniture] = useState(["desk"]);
@@ -115,10 +152,18 @@ export default function RoomPage() {
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
+  const spendXp = (amount) => {
+    const state = loadMokuState();
+    const newXp = Math.max(0, (state.xp || 0) - amount);
+    saveMokuState({ ...state, xp: newXp });
+    setXp(newXp);
+    return newXp;
+  };
+
   const buyWall = (w) => {
     if (ownedWalls.includes(w.id)) { setWallpaper(w); notify(`Applied: ${w.name}!`); return; }
     if (xp < w.cost) { notify("XP tidak cukup! 😢"); return; }
-    setXp(p => p - w.cost); setOwnedWalls(p => [...p, w.id]); setWallpaper(w); notify(`Bought & applied: ${w.name}! ✨`);
+    spendXp(w.cost); setOwnedWalls(p => [...p, w.id]); setWallpaper(w); notify(`Bought & applied: ${w.name}! ✨`);
   };
   const buyFurn = (f) => {
     if (ownedFurniture.includes(f.id)) {
@@ -127,17 +172,17 @@ export default function RoomPage() {
       return;
     }
     if (xp < f.cost) { notify("XP tidak cukup! 😢"); return; }
-    setXp(p => p - f.cost); setOwnedFurniture(p => [...p, f.id]); setPlacedFurniture(p => [...p, f.id]); notify(`Bought: ${f.name}! ✨`);
+    spendXp(f.cost); setOwnedFurniture(p => [...p, f.id]); setPlacedFurniture(p => [...p, f.id]); notify(`Bought: ${f.name}! ✨`);
   };
   const buyAcc = (a) => {
     if (ownedAcc.includes(a.id)) { setAccessory(a.id); notify(`Equipped: ${a.name}!`); return; }
     if (xp < a.cost) { notify("XP tidak cukup! 😢"); return; }
-    setXp(p => p - a.cost); setOwnedAcc(p => [...p, a.id]); setAccessory(a.id); notify(`Bought: ${a.name}! ✨`);
+    spendXp(a.cost); setOwnedAcc(p => [...p, a.id]); setAccessory(a.id); notify(`Bought: ${a.name}! ✨`);
   };
 
   return (
     <div style={{ padding: "20px 16px" }}>
-      <style>{`@keyframes twinkle{0%,100%{opacity:.3}50%{opacity:.8}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes bounceIn{0%{transform:scale(.9);opacity:0}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}`}</style>
+      <style>{`@keyframes twinkle{0%,100%{opacity:.3}50%{opacity:.8}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes bounceIn{0%{transform:scale(.9);opacity:0}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}@keyframes heartFloat{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-50px) scale(1.3)}}@keyframes speechPop{0%{opacity:0;transform:translateY(6px) scale(.9)}100%{opacity:1;transform:translateY(0) scale(1)}}`}</style>
 
       {/* Toast */}
       {toast && <div style={{ position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", background: t.card, border: `2px solid ${t.green}30`, borderRadius: 14, padding: "10px 20px", fontSize: 13, fontWeight: 700, color: t.green, boxShadow: t.shadow, zIndex: 100, animation: "bounceIn .3s ease" }}>{toast}</div>}
@@ -149,6 +194,12 @@ export default function RoomPage() {
           <p style={{ fontSize: 11, color: t.dim, margin: 0 }}>Dekorasi ruangan Moku-mu</p>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {(() => {
+            const lv = getLevel(xp);
+            const stage = getMokuStage(lv);
+            const stageEmoji = { baby: "🐣", teen: "🌱", prince: "🔥", legendary: "⭐" }[stage];
+            return <div style={{ padding: "5px 12px", borderRadius: 10, background: t.primaryBg, border: `1px solid ${t.primary}25`, fontSize: 11, fontWeight: 800, color: t.primary }}>{stageEmoji} Lv.{lv}</div>;
+          })()}
           <div style={{ padding: "5px 12px", borderRadius: 10, background: t.amberBg, border: `1px solid ${t.amber}25`, fontSize: 12, fontWeight: 800, color: t.amber }}>⚡ {xp} XP</div>
           <button onClick={() => setShowShop(!showShop)} style={{ padding: "6px 14px", borderRadius: 10, border: `1.5px solid ${t.primary}30`, background: t.primaryBg, color: t.primary, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{showShop ? "✕ Close" : "🛒 Shop"}</button>
         </div>
@@ -173,7 +224,13 @@ export default function RoomPage() {
                 title={f.name}>{f.emoji}</div>
             ))}
             <div style={{ position: "absolute", left: "38%", top: "42%", transform: "translate(-50%, -50%)" }}>
-              <MokuRoom size={110} accessory={accessory} />
+              {roomSpeech && (
+                <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.95)", borderRadius: 12, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "#333", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,.15)", marginBottom: 6, animation: "speechPop .25s ease", zIndex: 20 }}>
+                  {roomSpeech}
+                  <div style={{ position: "absolute", bottom: -5, left: "50%", transform: "translateX(-50%) rotate(45deg)", width: 8, height: 8, background: "rgba(255,255,255,.95)", boxShadow: "2px 2px 4px rgba(0,0,0,.08)" }} />
+                </div>
+              )}
+              <MokuRoom size={110} accessory={accessory} level={getLevel(xp)} onSpeech={(msg) => { setRoomSpeech(msg); setTimeout(() => setRoomSpeech(""), 3000); }} />
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "center", flexWrap: "wrap" }}>
