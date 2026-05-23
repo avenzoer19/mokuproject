@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(curl -sL --compressed \"https://api.anthropic.com/v1/design/h/BcYTyXGJFAyOWHZhfUR6Aw?open_file=Moku+Dry+Lab.html\")"
+    ]
+  }
+}
