@@ -527,7 +527,18 @@ export default function AuthPage() {
               {/* SSO buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {/* Google */}
-                <button style={{
+                <button
+                  onClick={async () => {
+                    setError('');
+                    const { error } = await supabase.auth.signInWithOAuth({
+                      provider: 'google',
+                      options: {
+                        redirectTo: `${window.location.origin}/auth/callback`,
+                      },
+                    });
+                    if (error) setError(error.message);
+                  }}
+                  style={{
                   height: '44px',
                   display: 'flex',
                   alignItems: 'center',
