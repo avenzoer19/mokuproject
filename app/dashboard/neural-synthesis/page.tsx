@@ -156,6 +156,49 @@ export default function NeuralSynthesisPage() {
   const [sheetOpen,         setSheetOpen]         = useState(false);
   const [miniCard,          setMiniCard]          = useState<{ node: GraphNode; sx: number; sy: number } | null>(null);
 
+  // AI gap analysis state
+  const [aiGaps,       setAiGaps]       = useState<GapCardData[]>(GAP_CARDS);
+  const [gapLoading,   setGapLoading]   = useState(false);
+  const [gapAnalyzed,  setGapAnalyzed]  = useState(false);
+
+  const runGapAnalysis = useCallback(async () => {
+    if (gapLoading || gapAnalyzed) return;
+    setGapLoading(true);
+    try {
+      const res = await fetch('/api/ai/gap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          papers: PAPER_NODES.map(n => ({
+            id: n.id,
+            title: n.label,
+            tags: [],
+            year: 2023,
+          })),
+          field: 'Biomaterials / Tissue Engineering / Electrospun Scaffolds',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.gaps && Array.isArray(data.gaps)) {
+          const mapped: GapCardData[] = data.gaps.map((g: { id: string; title: string; description: string; confidence: number; relatedPaperIds?: string[] }, i: number) => ({
+            id: `g${i + 1}`,
+            title: g.title,
+            explanation: g.description,
+            confidence: Math.min(98, Math.max(60, g.confidence)),
+            connectedTo: g.relatedPaperIds ?? GAP_CARDS[i]?.connectedTo ?? [],
+          }));
+          setAiGaps(mapped);
+          setGapAnalyzed(true);
+        }
+      }
+    } catch {
+      // Fall through — keep using static GAP_CARDS
+    } finally {
+      setGapLoading(false);
+    }
+  }, [gapLoading, gapAnalyzed]);
+
   // Refs synced to state for RAF reads
   const highlightedRef  = useRef<string[]>([]);
   const showLabelsRef   = useRef(true);
@@ -501,7 +544,7 @@ export default function NeuralSynthesisPage() {
               {miniCard.node.type === 'gap' && (
                 <button
                   onClick={() => {
-                    const card = GAP_CARDS.find(c => c.id === miniCard.node.id);
+                    const card = aiGaps.find(c => c.id === miniCard.node.id);
                     if (card) handleExploreGap(card);
                     setMiniCard(null);
                   }}
@@ -597,10 +640,28 @@ export default function NeuralSynthesisPage() {
           {/* Scrollable body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
+            {/* AI Analysis CTA */}
+            <button
+              onClick={runGapAnalysis}
+              disabled={gapLoading || gapAnalyzed}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                height: '34px', borderRadius: '9px',
+                border: gapAnalyzed ? '1px solid rgba(78,205,196,0.3)' : '1px solid var(--teal)',
+                background: gapAnalyzed ? 'var(--teal-soft)' : 'var(--teal)',
+                color: gapAnalyzed ? 'var(--teal)' : '#0F1117',
+                fontSize: '12px', fontWeight: 500, cursor: gapLoading || gapAnalyzed ? 'default' : 'pointer',
+                transition: 'all 0.15s', flexShrink: 0,
+              }}
+            >
+              <Sparkles size={13} style={{ animation: gapLoading ? 'spin 1.5s linear infinite' : 'none' }} />
+              {gapLoading ? 'Analyzing with Claude…' : gapAnalyzed ? '✓ AI Analysis Complete' : 'Analyze Gaps with Claude AI'}
+            </button>
+
             {/* Gap Cards */}
-            {GAP_CARDS.map(card => {
+            {aiGaps.map((card, idx) => {
               const isActive  = activeGap === card.id;
-              const isGold    = card.id === 'g1' || card.id === 'g2';
+              const isGold    = idx < 2;
               return (
                 <div
                   key={card.id}
@@ -812,7 +873,7 @@ export default function NeuralSynthesisPage() {
               </button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {GAP_CARDS.map(card => (
+              {aiGaps.map(card => (
                 <div key={card.id} style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--line)', background: 'var(--surface-2)' }}>
                   <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text)', marginBottom: '6px' }}>{card.title}</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-3)' }}>
@@ -828,6 +889,7 @@ export default function NeuralSynthesisPage() {
           </div>
         </div>
       )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

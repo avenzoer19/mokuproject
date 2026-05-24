@@ -158,9 +158,55 @@ export default function ScreeningPage() {
   const [resolvePick,       setResolvePick]       = useState<Decision>('include');
   const [resolved,          setResolved]          = useState<Set<string>>(new Set());
 
+  // ── AI triage results (real API) ──
+  interface AiResult { confidence: number; decision: Decision; reasoning: string; }
+  const [aiResults,    setAiResults]    = useState<Record<string, AiResult>>({});
+  const [aiLoading,    setAiLoading]    = useState<Record<string, boolean>>({});
+
+  // Fetch AI triage for all papers when screening starts
+  useEffect(() => {
+    if (viewState !== 'screening') return;
+    const unscored = PAPERS.filter(p => !aiResults[p.id]);
+    if (unscored.length === 0) return;
+
+    unscored.forEach(async (paper) => {
+      setAiLoading(prev => ({ ...prev, [paper.id]: true }));
+      try {
+        const res = await fetch('/api/ai/screen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paper: { title: paper.title, authors: paper.authors, year: paper.year, journal: paper.journal, abstract: paper.abstract },
+            criteria: { include: inclusionTags, exclude: exclusionTags },
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAiResults(prev => ({ ...prev, [paper.id]: {
+            confidence: data.confidence ?? paper.aiConfidence,
+            decision: data.decision ?? 'undecided',
+            reasoning: data.reasoning ?? paper.aiReasoning,
+          }}));
+        }
+      } catch {
+        // Fall through to use hardcoded values
+      } finally {
+        setAiLoading(prev => ({ ...prev, [paper.id]: false }));
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewState]);
+
   const currentCard = PAPERS[cardIdx];
   const TOTAL_SIM   = 247;
   const DONE_SIM    = 124 + Object.keys(decisions).length;
+
+  // Helper: get AI data for a paper (real result or fallback to hardcoded)
+  const getAi = (paper: Paper): AiResult => aiResults[paper.id] ?? {
+    confidence: paper.aiConfidence,
+    decision: 'undecided',
+    reasoning: paper.aiReasoning,
+  };
 
   // ── Tag helpers ──
   const addTag = (type: 'inc' | 'exc') => {
@@ -483,20 +529,26 @@ export default function ScreeningPage() {
                 </div>
 
                 {/* AI confidence badge (top-right) */}
-                <div style={{
-                  position: 'absolute', top: '14px', right: '14px',
-                  background: confidenceBg(currentCard.aiConfidence),
-                  border: `1px solid ${confidenceColor(currentCard.aiConfidence)}44`,
-                  borderRadius: '8px',
-                  padding: '4px 10px',
-                  display: 'flex', alignItems: 'center', gap: '5px',
-                  zIndex: 11,
-                }}>
-                  <Sparkles size={11} style={{ color: confidenceColor(currentCard.aiConfidence) }} />
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: confidenceColor(currentCard.aiConfidence), fontFamily: 'monospace' }}>
-                    AI {currentCard.aiConfidence}%
-                  </span>
-                </div>
+                {(() => {
+                  const ai = getAi(currentCard);
+                  const isLoadingAi = aiLoading[currentCard.id];
+                  return (
+                    <div style={{
+                      position: 'absolute', top: '14px', right: '14px',
+                      background: isLoadingAi ? 'var(--surface-3)' : confidenceBg(ai.confidence),
+                      border: `1px solid ${isLoadingAi ? 'var(--line)' : confidenceColor(ai.confidence) + '44'}`,
+                      borderRadius: '8px',
+                      padding: '4px 10px',
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      zIndex: 11,
+                    }}>
+                      <Sparkles size={11} style={{ color: isLoadingAi ? 'var(--text-4)' : confidenceColor(ai.confidence), animation: isLoadingAi ? 'spin 1.5s linear infinite' : 'none' }} />
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: isLoadingAi ? 'var(--text-4)' : confidenceColor(ai.confidence), fontFamily: 'monospace' }}>
+                        {isLoadingAi ? 'AI …' : `AI ${ai.confidence}%`}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Card header */}
                 <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
@@ -518,34 +570,45 @@ export default function ScreeningPage() {
                   </div>
 
                   {/* AI confidence bar */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '10px', color: 'var(--text-4)', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Confidence</span>
-                      <span style={{ fontSize: '10.5px', fontWeight: 600, color: confidenceColor(currentCard.aiConfidence), fontFamily: 'monospace' }}>
-                        {currentCard.aiConfidence}%
-                      </span>
-                    </div>
-                    <div style={{ height: '5px', background: 'var(--surface-3)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${currentCard.aiConfidence}%`, background: confidenceColor(currentCard.aiConfidence), borderRadius: '4px', transition: 'width 0.5s ease' }} />
-                    </div>
-                  </div>
+                  {(() => {
+                    const ai = getAi(currentCard);
+                    const isLoadingAi = aiLoading[currentCard.id];
+                    return (
+                      <>
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-4)', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Confidence</span>
+                            <span style={{ fontSize: '10.5px', fontWeight: 600, color: isLoadingAi ? 'var(--text-4)' : confidenceColor(ai.confidence), fontFamily: 'monospace' }}>
+                              {isLoadingAi ? '…' : `${ai.confidence}%`}
+                            </span>
+                          </div>
+                          <div style={{ height: '5px', background: 'var(--surface-3)', borderRadius: '4px', overflow: 'hidden' }}>
+                            {isLoadingAi
+                              ? <div style={{ height: '100%', width: '40%', background: 'var(--surface-2)', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+                              : <div style={{ height: '100%', width: `${ai.confidence}%`, background: confidenceColor(ai.confidence), borderRadius: '4px', transition: 'width 0.5s ease' }} />
+                            }
+                          </div>
+                        </div>
 
-                  {/* AI Reasoning accordion */}
-                  <button
-                    onClick={() => setReasoningExpanded(v => !v)}
-                    style={{ width: '100%', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '9px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: 'var(--text-3)', fontSize: '11.5px', fontWeight: 500 }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Sparkles size={12} style={{ color: 'var(--teal)' }} />
-                      AI Reasoning
-                    </span>
-                    {reasoningExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </button>
-                  {reasoningExpanded && (
-                    <div style={{ marginTop: '6px', padding: '10px 12px', background: 'var(--surface-2)', borderRadius: '0 0 10px 10px', border: '1px solid var(--line)', borderTop: 'none', fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.65, fontStyle: 'italic' }}>
-                      {currentCard.aiReasoning}
-                    </div>
-                  )}
+                        {/* AI Reasoning accordion */}
+                        <button
+                          onClick={() => setReasoningExpanded(v => !v)}
+                          style={{ width: '100%', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: '10px', padding: '9px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: 'var(--text-3)', fontSize: '11.5px', fontWeight: 500 }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Sparkles size={12} style={{ color: 'var(--teal)' }} />
+                            AI Reasoning {isLoadingAi && <span style={{ color: 'var(--text-4)', fontSize: '10px' }}>— analyzing…</span>}
+                          </span>
+                          {reasoningExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        {reasoningExpanded && (
+                          <div style={{ marginTop: '6px', padding: '10px 12px', background: 'var(--surface-2)', borderRadius: '0 0 10px 10px', border: '1px solid var(--line)', borderTop: 'none', fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.65, fontStyle: 'italic' }}>
+                            {isLoadingAi ? 'Claude is evaluating this paper against your criteria…' : ai.reasoning}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (
