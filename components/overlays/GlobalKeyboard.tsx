@@ -87,6 +87,7 @@ export default function GlobalKeyboard() {
         switch (e.key.toLowerCase()) {
           case 'h': router.push('/dashboard'); break;
           case 'l': router.push('/dashboard/library'); break;
+          case 'n': router.push('/dashboard/neural-synthesis'); break;
           case 'w': router.push('/dashboard/wet-lab'); break;
           case 'd': router.push('/dashboard/dry-lab'); break;
           case 's': router.push('/dashboard/studio'); break;
