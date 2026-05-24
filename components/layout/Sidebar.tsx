@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Library, TestTube2, FlaskConical,
   FileText, Settings, ChevronLeft, ChevronRight,
-  Users, FolderOpen, Network,
+  Users, FolderOpen, Network, ScanSearch,
 } from 'lucide-react';
 import { useSidebar } from '@/components/providers/AppProviders';
 
@@ -18,6 +18,7 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { href: '/dashboard',                   icon: <LayoutDashboard size={17} />, label: 'Dashboard'        },
   { href: '/dashboard/library',           icon: <Library size={17} />,         label: 'Library'           },
+  { href: '/dashboard/screening',         icon: <ScanSearch size={17} />,      label: 'Screening'         },
   { href: '/dashboard/neural-synthesis',  icon: <Network size={17} />,         label: 'Neural Synthesis'  },
 ];
 
