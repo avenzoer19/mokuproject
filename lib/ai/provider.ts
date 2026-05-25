@@ -14,20 +14,29 @@ function getBackend(): InferenceBackend {
   return 'gemini';
 }
 
-// ── Non-streaming completion ──────────────────────────────────────────────────
+// ── Non-streaming completion (for structured JSON responses) ──────────────────
 
-export async function complete(prompt: string, maxTokens = 800): Promise<string> {
+export async function complete(prompt: string, maxTokens = 1024): Promise<string> {
   const provider = getBackend();
 
   if (provider === 'gemini') {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model: GenerativeModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model: GenerativeModel = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 },
-    });
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: 0.1,
+        // Disable thinking for structured JSON — faster, no budget bleed
+        thinkingConfig: { thinkingBudget: 0 },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    } as Parameters<typeof model.generateContent>[0]);
     return result.response.text();
   }
 
@@ -61,9 +70,10 @@ export async function streamChat(
     if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
-    });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
 
     const history = messages.slice(0, -1).map(m => ({
       role: m.role === 'user' ? 'user' : 'model',
@@ -73,7 +83,11 @@ export async function streamChat(
 
     const chat = model.startChat({
       history,
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.7,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     });
 
     const streamResult = await chat.sendMessageStream(lastUserMsg);
@@ -107,7 +121,7 @@ export async function streamChat(
 
   const stream = await client.messages.stream({
     model: 'claude-opus-4-5',
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: systemPrompt,
     messages: anthropicMessages,
   });
