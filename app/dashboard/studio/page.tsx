@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Bold, Italic, Heading1, Heading2, Quote,
   BookOpen, Image, Minus, Undo2, Redo2,
   ChevronLeft, ChevronRight, Maximize2, Minimize2,
-  FileText, Star, Eye, AlignLeft,
+  FileText, Star, Eye, AlignLeft, Plus, Check, ChevronDown,
 } from 'lucide-react';
+import { useManuscript } from '@/lib/hooks/useManuscript';
 
 const OUTLINE = [
   { level: 1, title: 'Abstract',              active: false },
@@ -57,11 +58,57 @@ export default function StudioPage() {
   const [activeRpTab, setActiveRpTab] = useState<'journals' | 'reviewer' | 'refs'>('journals');
   const [activeOutline, setActiveOutline] = useState(1);
   const editorRef = useRef<HTMLDivElement>(null);
-  const [hasContent, setHasContent] = useState(true);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const [hasContent, setHasContent] = useState(false);
   const [selectionToolbar, setSelectionToolbar] = useState<{ x: number; y: number } | null>(null);
+  const [openManuscriptId, setOpenManuscriptId] = useState<string | undefined>(undefined);
+  const [showMsMenu, setShowMsMenu] = useState(false);
+
+  const { manuscript, allManuscripts, loading: msLoading, saving, createManuscript, saveContent } = useManuscript(openManuscriptId);
 
   const outlineW = zenMode ? 0 : outlineOpen ? 220 : 0;
   const rpW = zenMode ? 0 : rpOpen ? 280 : 0;
+
+  // Open first manuscript on mount
+  useEffect(() => {
+    if (!msLoading && !openManuscriptId) {
+      if (allManuscripts.length > 0) {
+        setOpenManuscriptId(allManuscripts[0].id);
+      }
+    }
+  }, [msLoading, allManuscripts, openManuscriptId]);
+
+  // Populate editor when manuscript loads
+  useEffect(() => {
+    if (manuscript && editorRef.current) {
+      editorRef.current.innerHTML = manuscript.content ?? '';
+      setHasContent(!!(manuscript.content?.trim()));
+    }
+    if (manuscript && titleRef.current) {
+      titleRef.current.textContent = manuscript.title ?? 'Untitled Manuscript';
+    }
+  }, [manuscript?.id]); // Only re-populate when switching manuscripts, not on every save
+
+  const handleContentChange = useCallback(() => {
+    if (!manuscript || !editorRef.current) return;
+    const content = editorRef.current.innerHTML;
+    const title = titleRef.current?.textContent ?? manuscript.title;
+    setHasContent(!!(editorRef.current.textContent?.trim()));
+    saveContent(manuscript.id, content, title);
+  }, [manuscript, saveContent]);
+
+  const handleTitleChange = useCallback(() => {
+    if (!manuscript || !editorRef.current) return;
+    const content = editorRef.current.innerHTML;
+    const title = titleRef.current?.textContent?.trim() ?? 'Untitled Manuscript';
+    saveContent(manuscript.id, content, title);
+  }, [manuscript, saveContent]);
+
+  async function handleNewManuscript() {
+    const ms = await createManuscript('Untitled Manuscript');
+    if (ms) { setOpenManuscriptId(ms.id); }
+    setShowMsMenu(false);
+  }
 
   useEffect(() => {
     const handler = () => {
@@ -153,6 +200,43 @@ export default function StudioPage() {
 
           <div style={{ flex: 1 }} />
 
+          {/* Manuscript picker */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowMsMenu(v => !v)}
+              style={{ ...tbtnStyle(showMsMenu), gap: 4, paddingLeft: 8, paddingRight: 8, fontSize: 12, color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center' }}
+            >
+              <FileText size={12} />
+              <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {manuscript?.title ?? 'No manuscript'}
+              </span>
+              <ChevronDown size={11} />
+            </button>
+            {showMsMenu && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '6px', zIndex: 20, minWidth: 220, boxShadow: 'var(--shadow)' }}>
+                {allManuscripts.map(ms => (
+                  <button key={ms.id} onClick={() => { setOpenManuscriptId(ms.id); setShowMsMenu(false); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', background: ms.id === openManuscriptId ? 'var(--teal-soft)' : 'transparent', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 13, color: ms.id === openManuscriptId ? 'var(--teal)' : 'var(--text)', textAlign: 'left' }}>
+                    {ms.id === openManuscriptId && <Check size={12} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{ms.title}</span>
+                  </button>
+                ))}
+                <div style={{ height: 1, background: 'var(--line)', margin: '4px 0' }} />
+                <button onClick={handleNewManuscript}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 13, color: 'var(--teal)' }}>
+                  <Plus size={12} /> New manuscript
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Save indicator */}
+          <div style={{ fontSize: 11, color: saving ? 'var(--teal)' : 'var(--text-4)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.08em', marginLeft: 8, whiteSpace: 'nowrap' }}>
+            {saving ? '● saving…' : manuscript ? '✓ saved' : ''}
+          </div>
+
+          <div style={{ width: '1px', height: '20px', background: 'var(--line)', margin: '0 6px' }} />
+
           {/* Zen mode */}
           <button
             onClick={() => setZenMode(v => !v)}
@@ -226,8 +310,10 @@ export default function StudioPage() {
         <div style={{ width: '100%', maxWidth: '680px' }}>
           {/* Document title */}
           <div
-            contentEditable
+            ref={titleRef}
+            contentEditable={!!manuscript}
             suppressContentEditableWarning
+            onBlur={handleTitleChange}
             style={{
               fontSize: '28px',
               fontWeight: 300,
@@ -237,25 +323,41 @@ export default function StudioPage() {
               lineHeight: 1.3,
               fontFamily: 'Spectral, Georgia, serif',
             }}
+            data-placeholder="Untitled Manuscript"
           >
-            Nanomaterial Cytotoxicity Profiles in Primary Cell Lines: A Systematic Review and Meta-Analysis
+            {!manuscript && !msLoading ? 'Start a new manuscript' : ''}
           </div>
           <div style={{ fontSize: '13px', color: 'var(--text-4)', marginBottom: '32px', fontFamily: 'var(--font-geist-sans)' }}>
-            Aisha Okonkwo, Kamau Mwangi, Ren Patel · Last saved 2 min ago · 3,847 words
+            {manuscript
+              ? `${manuscript.word_count ?? 0} words · ${saving ? 'Saving…' : 'Auto-saved'}`
+              : msLoading ? 'Loading…' : 'No manuscript open'
+            }
           </div>
 
           {/* Editor content */}
+          {!manuscript && !msLoading && (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-4)' }}>
+              <FileText size={40} strokeWidth={0.8} style={{ opacity: 0.3, margin: '0 auto 16px', display: 'block' }} />
+              <div style={{ fontSize: 15, color: 'var(--text-3)', marginBottom: 8 }}>Your manuscript starts here.</div>
+              <div style={{ fontSize: 12, marginBottom: 24 }}>Create a new manuscript or select one from the toolbar above.</div>
+              <button onClick={handleNewManuscript} style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontWeight: 500, padding: '10px 20px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Plus size={14} /> New Manuscript
+              </button>
+            </div>
+          )}
           <div
             ref={editorRef}
-            contentEditable
+            contentEditable={!!manuscript}
             suppressContentEditableWarning
+            onInput={handleContentChange}
             style={{
               outline: 'none',
               fontFamily: 'Spectral, Georgia, serif',
               fontSize: '17px',
               lineHeight: 1.75,
               color: 'var(--text)',
-              minHeight: '400px',
+              minHeight: manuscript ? '400px' : '0',
+              display: manuscript ? undefined : 'none',
             }}
           >
             <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px', color: 'var(--text)' }}>Abstract</h2>

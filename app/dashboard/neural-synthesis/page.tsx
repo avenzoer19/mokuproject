@@ -6,6 +6,7 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Tag, Sparkles,
   Download, X, ChevronUp, FileText,
 } from 'lucide-react';
+import { usePapers } from '@/lib/hooks/usePapers';
 
 // ─────────────────────────── Data ───────────────────────────
 
@@ -135,7 +136,33 @@ function project3D(
 
 // ─────────────────────────── Page Component ───────────────────────────
 
+// Fibonacci sphere distribution for deterministic 3D positioning
+function spherePos(i: number, n: number): { x: number; y: number; z: number } {
+  const phi = Math.acos(1 - 2 * (i + 0.5) / n);
+  const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+  return {
+    x: Math.sin(phi) * Math.cos(theta) * 0.8,
+    y: Math.sin(phi) * Math.sin(theta) * 0.8,
+    z: Math.cos(phi) * 0.8,
+  };
+}
+
 export default function NeuralSynthesisPage() {
+  // Real data from DB
+  const { papers: dbPapers, loading: papersLoading } = usePapers();
+
+  // Compute paper nodes from DB (or fall back to hardcoded)
+  const paperNodes: GraphNode[] = dbPapers.length > 0
+    ? dbPapers.map((p, i) => ({
+        id: p.id,
+        label: p.title.length > 60 ? p.title.slice(0, 57) + '…' : p.title,
+        type: 'paper' as const,
+        ...spherePos(i, dbPapers.length),
+      }))
+    : PAPER_NODES;
+
+  const allNodesComputed: GraphNode[] = [...paperNodes, ...GAP_NODES];
+
   // Mutable animation state (refs – no re-render cost)
   const canvasRef      = useRef<HTMLCanvasElement>(null);
   const rotX           = useRef(0.18);
@@ -169,7 +196,7 @@ export default function NeuralSynthesisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          papers: PAPER_NODES.map(n => ({
+          papers: paperNodes.map(n => ({
             id: n.id,
             title: n.label,
             tags: [],
@@ -248,7 +275,7 @@ export default function NeuralSynthesisPage() {
       for (let gy = 0; gy < H; gy += g) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
 
       // Project
-      const projected = ALL_NODES.map(n =>
+      const projected = allNodesComputed.map(n =>
         project3D(n, rotX.current, rotY.current, zoom.current, cx, cy)
       );
       const nodeMap: Record<string, Projected> = {};
@@ -395,7 +422,7 @@ export default function NeuralSynthesisPage() {
     const dt = Date.now() - tapStart.current.t;
     const dist = Math.hypot(e.clientX - tapStart.current.x, e.clientY - tapStart.current.y);
     if (dt < 250 && dist < 8 && lastHovered.current) {
-      const tapped = ALL_NODES.find(n => n.id === lastHovered.current);
+      const tapped = allNodesComputed.find(n => n.id === lastHovered.current);
       if (tapped) {
         const rect = canvasRef.current!.getBoundingClientRect();
         setMiniCard({ node: tapped, sx: e.clientX - rect.left, sy: e.clientY - rect.top });
@@ -425,7 +452,7 @@ export default function NeuralSynthesisPage() {
   };
 
   // Hovered node data for tooltip
-  const hoveredData = hoveredNode ? ALL_NODES.find(n => n.id === hoveredNode) : null;
+  const hoveredData = hoveredNode ? allNodesComputed.find(n => n.id === hoveredNode) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -447,7 +474,7 @@ export default function NeuralSynthesisPage() {
               Neural Synthesis <em style={{ color: 'var(--teal)', fontStyle: 'italic' }}>&</em> Gap Finder
             </h1>
             <div style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }}>
-              8 papers indexed · 3 research gaps detected · AI confidence 79–87%
+              {paperNodes.length} papers indexed · {aiGaps.length} research gaps detected · AI confidence 79–87%
             </div>
           </div>
           {/* Legend */}

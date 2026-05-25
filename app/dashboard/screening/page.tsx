@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useScreening } from '@/lib/hooks/useScreening';
 import {
   Plus, X, Play, Pause, ChevronDown, ChevronUp,
   CheckCircle2, XCircle, MinusCircle, ArrowLeft,
@@ -129,6 +130,10 @@ function DecisionPill({ d }: { d: Decision }) {
 // ─────────────────────── Page ───────────────────────
 
 export default function ScreeningPage() {
+  // ── DB hook ──
+  const { sessions, createSession, saveDecision, completeSession, loading: sessionsLoading } = useScreening();
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
   // ── View state ──
   const [viewState,   setViewState]   = useState<ViewState>('setup');
   const [activeTab,   setActiveTab]   = useState<ActiveTab>('screening');
@@ -226,6 +231,11 @@ export default function ScreeningPage() {
     const dir = d === 'include' ? 'right' : d === 'exclude' ? 'left' : 'down';
     setExiting({ dir, d });
 
+    // Save decision to DB in background
+    if (currentSessionId) {
+      saveDecision(currentSessionId, null, currentCard.title, d).catch(() => null);
+    }
+
     setTimeout(() => {
       setDecisions(prev => ({ ...prev, [currentCard.id]: d }));
       setCardIdx(prev => Math.min(prev + 1, PAPERS.length - 1));
@@ -234,7 +244,7 @@ export default function ScreeningPage() {
       setSwipeHint(null);
       setExiting(null);
     }, 260);
-  }, [currentCard]);
+  }, [currentCard, currentSessionId, saveDecision]);
 
   // ── Keyboard ──
   useEffect(() => {
@@ -368,6 +378,28 @@ export default function ScreeningPage() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 22px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '100%', maxWidth: '680px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
+            {/* Past sessions */}
+            {!sessionsLoading && sessions.length > 0 && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '16px 18px' }}>
+                <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-4)', marginBottom: 10 }}>Previous Sessions</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {sessions.slice(0, 4).map(s => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--line-soft)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2, fontFamily: 'var(--font-geist-mono,monospace)' }}>
+                          {s.done_count ?? 0} screened · {s.status}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: s.status === 'completed' ? 'rgba(111,191,138,0.12)' : 'var(--teal-soft)', color: s.status === 'completed' ? 'var(--success)' : 'var(--teal)' }}>
+                        {s.status === 'completed' ? 'Done' : 'Active'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Inclusion */}
             <CriteriaBox
               label="Inclusion Criteria"
@@ -422,7 +454,13 @@ export default function ScreeningPage() {
 
             {/* CTA */}
             <button
-              onClick={() => { setViewState('screening'); setActiveTab('screening'); }}
+              onClick={async () => {
+                const title = `Screening ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                const session = await createSession(title, inclusionTags, exclusionTags);
+                if (session) setCurrentSessionId(session.id);
+                setViewState('screening');
+                setActiveTab('screening');
+              }}
               style={{
                 height: '48px',
                 borderRadius: '14px',

@@ -5,123 +5,171 @@ import {
   Search, SlidersHorizontal, Plus, Calendar, BookMarked, Atom, Quote,
   Unlock, Highlighter, ChevronDown, ChevronUp, Minus, List, Download,
   FileText, Bookmark, BookmarkCheck, MoreHorizontal, FlaskConical, Layers,
-  BarChart3, ArrowUpRight, Check, Sparkles, MessageSquareText, Link2,
+  BarChart3, ArrowUpRight, Check, Sparkles, MessageSquareText, Link2, X,
 } from 'lucide-react';
+import { usePapers, PaperWithTags } from '@/lib/hooks/usePapers';
+import { useUser } from '@/lib/hooks/useUser';
+import { createClient } from '@/lib/supabase/client';
 
-/* ─── Data ──────────────────────────────────────────────────── */
-const PAPERS = [
-  {
-    id: 1,
-    title: 'Electrospun PCL/PVP composite scaffolds for accelerated dermal wound regeneration',
-    doi: '10.1039/d4bm00021a',
-    authors: 'Setiawan, A., Iwasaki, M., Petrova, L., +2',
-    year: 2024,
-    journal: 'Biomaterials Science',
-    cites: 47,
-    tags: [['Scaffold', 1], ['Electrospinning', 2], ['PCL', 3]] as [string, number][],
-    saved: true,
-    active: true,
-  },
-  {
-    id: 2,
-    title: 'Hydrophilic PVP additives modulate fiber morphology in polymer blends',
-    doi: '10.1021/acsami.3c01987',
-    authors: 'Müller, R., Okafor, J., Chen, Y.',
-    year: 2023,
-    journal: 'ACS Applied Materials & Interfaces',
-    cites: 122,
-    tags: [['PVP', 1], ['Morphology', 4]] as [string, number][],
-    saved: false,
-    active: false,
-  },
-  {
-    id: 3,
-    title: 'A systematic review of scaffold porosity in skin tissue engineering',
-    doi: '10.1016/j.biomaterials.2022.121556',
-    authors: 'Petrova, L., Aharon, D.',
-    year: 2022,
-    journal: 'Biomaterials',
-    cites: 318,
-    tags: [['Review', 3], ['Porosity', 1]] as [string, number][],
-    saved: true,
-    active: false,
-  },
-  {
-    id: 4,
-    title: 'Crosslinking strategies for biodegradable polyester nanofibers',
-    doi: '10.1002/adfm.202109334',
-    authors: 'Iwasaki, M., Tanaka, S., Reyes, F., +4',
-    year: 2021,
-    journal: 'Advanced Functional Materials',
-    cites: 89,
-    tags: [['Crosslinking', 2], ['UV', 4]] as [string, number][],
-    saved: false,
-    active: false,
-  },
-  {
-    id: 5,
-    title: 'Murine excisional wound models: a critical methodological appraisal',
-    doi: '10.1111/wrr.12943',
-    authors: 'Okafor, J., Setiawan, A.',
-    year: 2024,
-    journal: 'Wound Repair & Regeneration',
-    cites: 12,
-    tags: [['In vivo', 1], ['Methods', 3]] as [string, number][],
-    saved: false,
-    active: false,
-  },
-  {
-    id: 6,
-    title: 'Drug-loaded electrospun mats: from PVP carriers to controlled release',
-    doi: '10.1016/j.jconrel.2023.05.022',
-    authors: 'Chen, Y., Reyes, F., Müller, R., +1',
-    year: 2023,
-    journal: 'Journal of Controlled Release',
-    cites: 61,
-    tags: [['Drug delivery', 2], ['PVP', 1]] as [string, number][],
-    saved: false,
-    active: false,
-  },
-  {
-    id: 7,
-    title: 'Mechanical characterisation of nanofibrous scaffolds under tensile load',
-    doi: '10.1016/j.jmbbm.2020.103847',
-    authors: 'Aharon, D., Petrova, L., +2',
-    year: 2020,
-    journal: 'J. Mech. Behav. Biomed. Mater.',
-    cites: 204,
-    tags: [['Mechanical', 4]] as [string, number][],
-    saved: true,
-    active: false,
-  },
-];
+/* ─── Import Paper Modal ──────────────────────────────────────── */
+function ImportPaperModal({ onClose, onImport }: {
+  onClose: () => void;
+  onImport: (data: { title: string; authors: string; year: number | null; journal: string; doi: string; abstract: string; citation_count: number | null; file: File | null }) => Promise<void>;
+}) {
+  const [form, setForm] = useState({ title: '', authors: '', year: '', journal: '', doi: '', abstract: '', citation_count: '' });
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savingMsg, setSavingMsg] = useState('');
+  const [error, setError] = useState('');
 
-type Paper = typeof PAPERS[number];
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
 
-const TAG_COLORS: Record<number, string> = {
-  1: 'var(--teal)',
-  2: 'var(--violet)',
-  3: 'var(--warn)',
-  4: 'var(--rose)',
-};
-const TAG_BORDERS: Record<number, string> = {
-  1: 'rgba(78,205,196,0.25)',
-  2: 'rgba(183,156,255,0.25)',
-  3: 'rgba(224,169,87,0.25)',
-  4: 'rgba(239,161,180,0.25)',
-};
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError('Title is required'); return; }
+    setSaving(true);
+    setSavingMsg(pdfFile ? 'Saving paper…' : 'Adding to library…');
+    try {
+      await onImport({
+        title: form.title.trim(),
+        authors: form.authors.trim() || '',
+        year: form.year ? parseInt(form.year) : null,
+        journal: form.journal.trim() || '',
+        doi: form.doi.trim() || '',
+        abstract: form.abstract.trim() || '',
+        citation_count: form.citation_count ? parseInt(form.citation_count) : null,
+        file: pdfFile,
+      });
+      onClose();
+    } catch { setError('Failed to save. Please try again.'); setSaving(false); }
+  }
 
-const ACTIVE_FILTERS = ['year', 'journal'];
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 20, padding: '28px 28px 24px', width: 'min(560px, 94vw)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 400, color: 'var(--text)' }}>Import Paper</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Add paper metadata to your library</div>
+          </div>
+          <button onClick={onClose} style={{ appearance: 'none', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 6 }}>
+            <X size={18} strokeWidth={1.5} />
+          </button>
+        </div>
+        {error && <div style={{ fontSize: 12, color: 'var(--red)', background: 'rgba(229,86,75,0.08)', border: '1px solid rgba(229,86,75,0.2)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { k: 'title', label: 'Title *', placeholder: 'Full paper title', required: true },
+            { k: 'authors', label: 'Authors', placeholder: 'e.g. Smith, J., Doe, A.' },
+            { k: 'doi', label: 'DOI', placeholder: 'e.g. 10.1039/d4bm00021a' },
+          ].map(({ k, label, placeholder, required }) => (
+            <div key={k}>
+              <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
+              <input
+                value={form[k as keyof typeof form]}
+                onChange={set(k)}
+                placeholder={placeholder}
+                required={required}
+                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+              />
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            {[
+              { k: 'year', label: 'Year', placeholder: '2024' },
+              { k: 'journal', label: 'Journal', placeholder: 'Journal name' },
+              { k: 'citation_count', label: 'Citations', placeholder: '0' },
+            ].map(({ k, label, placeholder }) => (
+              <div key={k}>
+                <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
+                <input
+                  value={form[k as keyof typeof form]}
+                  onChange={set(k)}
+                  placeholder={placeholder}
+                  type="number"
+                  min={k === 'year' ? 1900 : 0}
+                  style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Abstract</label>
+            <textarea
+              value={form.abstract}
+              onChange={set('abstract')}
+              placeholder="Paste abstract here…"
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'vertical' }}
+            />
+          </div>
+
+          {/* PDF Upload */}
+          <div>
+            <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+              PDF File <span style={{ color: 'var(--text-4)', fontWeight: 300 }}>(optional)</span>
+            </label>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: 'var(--bg)', border: `1px dashed ${pdfFile ? 'var(--teal)' : 'var(--line)'}`,
+              borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
+              transition: 'border-color 0.15s',
+            }}>
+              <FileText size={16} style={{ color: pdfFile ? 'var(--teal)' : 'var(--text-4)', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: pdfFile ? 'var(--text)' : 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pdfFile ? pdfFile.name : 'Click to attach PDF…'}
+              </span>
+              {pdfFile && (
+                <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setPdfFile(null); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 0, display: 'flex' }}>
+                  <X size={14} />
+                </button>
+              )}
+              <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                onChange={e => setPdfFile(e.target.files?.[0] ?? null)} />
+            </label>
+            {pdfFile && (
+              <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                {(pdfFile.size / 1024 / 1024).toFixed(1)} MB
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+            <button type="button" onClick={onClose} style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--text-2)', fontSize: 13, fontFamily: 'inherit', padding: '10px 18px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, padding: '10px 20px', cursor: 'pointer', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? savingMsg : <><Plus size={14} /> Add to Library</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const ACTIVE_FILTERS_DEFAULT = ['year', 'journal'];
 
 export default function LibraryPage() {
+  /* ─── Data hooks ─────────────────────────────────────────── */
+  const { papers: dbPapers, loading: dbLoading, addPaper, toggleBookmark, uploadPdf } = usePapers();
+  const { user } = useUser();
+
   /* ─── State ──────────────────────────────────────────────── */
-  const [loading, setLoading] = useState(true);
-  const [papers, setPapers] = useState<Paper[]>([]);
-  const [activeId, setActiveId] = useState(1);
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(ACTIVE_FILTERS));
+  const [skeletonDone, setSkeletonDone] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set(ACTIVE_FILTERS_DEFAULT));
   const [aiTab, setAiTab] = useState<'extraction' | 'notes' | 'citations'>('extraction');
   const [annoPop, setAnnoPop] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+  const [showImport, setShowImport] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Minimum skeleton time: 950ms (same as before)
+  const loading = dbLoading || !skeletonDone;
 
   /* ─── Refs ───────────────────────────────────────────────── */
   const libRef = useRef<HTMLDivElement>(null);
@@ -147,13 +195,29 @@ export default function LibraryPage() {
       }
     } catch (_) {}
 
-    // Skeleton → data
-    const t = setTimeout(() => {
-      setPapers(PAPERS);
-      setLoading(false);
-    }, 950);
+    // Minimum skeleton display time
+    const t = setTimeout(() => setSkeletonDone(true), 950);
     return () => clearTimeout(t);
   }, []);
+
+  // Set first paper as active when data loads
+  useEffect(() => {
+    if (dbPapers.length > 0 && !activeId) {
+      setActiveId(dbPapers[0].id);
+    }
+  }, [dbPapers, activeId]);
+
+  // Filtered + searched papers
+  const filteredPapers = searchQuery.trim()
+    ? dbPapers.filter(p =>
+        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.authors ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.doi ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.journal ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : dbPapers;
+
+  const activePaper = dbPapers.find(p => p.id === activeId) ?? null;
 
   /* ─── Toast helper ───────────────────────────────────────── */
   const showToast = useCallback((message: string) => {
@@ -191,12 +255,14 @@ export default function LibraryPage() {
     };
   }, []);
 
-  function handleAnnotation(act: 'highlight' | 'note' | 'copilot') {
+  async function handleAnnotation(act: 'highlight' | 'note' | 'copilot') {
     const sel = window.getSelection();
+    let selectedText = '';
     if (sel && !sel.isCollapsed && pdfScrollRef.current) {
       try {
         const range = sel.getRangeAt(0);
         if (pdfScrollRef.current.contains(range.commonAncestorContainer)) {
+          selectedText = sel.toString().trim();
           const mark = document.createElement('mark');
           mark.style.background = 'var(--highlight)';
           mark.style.padding = '1px 2px';
@@ -210,6 +276,20 @@ export default function LibraryPage() {
     }
     setAnnoPop(p => ({ ...p, visible: false }));
     showToast(act === 'highlight' ? 'Highlight saved' : act === 'note' ? 'Note added' : 'Sent to Copilot');
+
+    // Persist to DB if we have a paper + user + text
+    if (selectedText && activeId && user) {
+      try {
+        const supabase = createClient();
+        await supabase.from('annotations').insert({
+          paper_id: activeId,
+          user_id: user.id,
+          selected_text: selectedText,
+          type: act,
+          color: act === 'highlight' ? 'var(--teal)' : null,
+        });
+      } catch (_) {}
+    }
   }
 
   /* ─── Row resizer (vertical drag, list ↔ reader) ─────────── */
@@ -315,11 +395,30 @@ export default function LibraryPage() {
   }, []);
 
   /* ─── Saved toggle ───────────────────────────────────────── */
-  function toggleSaved(id: number, e: React.MouseEvent) {
+  async function toggleSaved(id: string, current: boolean, e: React.MouseEvent) {
     e.stopPropagation();
-    setPapers(prev => prev.map(p => p.id === id ? { ...p, saved: !p.saved } : p));
-    const p = papers.find(x => x.id === id);
-    if (p && !p.saved) showToast('Bookmarked');
+    await toggleBookmark(id, current);
+    if (!current) showToast('Bookmarked');
+  }
+
+  /* ─── Import paper ───────────────────────────────────────── */
+  async function handleImport(data: { title: string; authors: string; year: number | null; journal: string; doi: string; abstract: string; citation_count: number | null; file: File | null }) {
+    const paper = await addPaper({
+      title: data.title,
+      authors: data.authors || null,
+      year: data.year,
+      journal: data.journal || null,
+      doi: data.doi || null,
+      abstract: data.abstract || null,
+      citation_count: data.citation_count,
+      is_bookmarked: false,
+    });
+    if (paper && data.file) {
+      await uploadPdf(paper.id, data.file);
+      showToast('Paper + PDF added to library');
+    } else {
+      showToast('Paper added to library');
+    }
   }
 
   /* ─── Chip filter toggle ─────────────────────────────────── */
@@ -363,18 +462,18 @@ export default function LibraryPage() {
             <div className="lib-title">
               <span className="lib-eyebrow">
                 <span className="lib-pulse" />
-                Library · 128 papers
+                Library · {loading ? '…' : dbPapers.length} papers
               </span>
               <h1>Your <em>research</em> shelf.</h1>
             </div>
             <div className="lib-stats">
-              <span><b>128</b>&nbsp; papers</span>
+              <span><b>{loading ? '–' : dbPapers.length}</b>&nbsp; papers</span>
               <span className="stat-sep" />
-              <span><b>47</b>&nbsp; annotated</span>
+              <span><b>{loading ? '–' : dbPapers.filter(p => p.is_bookmarked).length}</b>&nbsp; bookmarked</span>
               <span className="stat-sep" />
-              <span><b>12</b>&nbsp; new</span>
+              <span><b>{loading ? '–' : dbPapers.filter(p => (new Date().getTime() - new Date(p.created_at ?? 0).getTime()) < 7 * 24 * 60 * 60 * 1000).length}</b>&nbsp; new this week</span>
               <span className="stat-sep" />
-              <span><b>3.2k</b>&nbsp; citations</span>
+              <span><b>{loading ? '–' : (dbPapers.reduce((s, p) => s + (p.citation_count ?? 0), 0) > 999 ? (dbPapers.reduce((s, p) => s + (p.citation_count ?? 0), 0) / 1000).toFixed(1) + 'k' : dbPapers.reduce((s, p) => s + (p.citation_count ?? 0), 0))}</b>&nbsp; citations</span>
             </div>
           </div>
 
@@ -384,7 +483,8 @@ export default function LibraryPage() {
               <input
                 type="search"
                 placeholder="Search papers, authors, abstracts, or paste a DOI / arXiv ID…"
-                defaultValue="pcl pvp scaffold electrospun"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
               />
               <span className="search-kbd">
                 <kbd>⌘</kbd><kbd>K</kbd>
@@ -394,7 +494,7 @@ export default function LibraryPage() {
               <button className="pill-btn">
                 <SlidersHorizontal size={14} strokeWidth={1.5} /> Advanced
               </button>
-              <button className="pill-btn primary">
+              <button className="pill-btn primary" onClick={() => setShowImport(true)}>
                 <Plus size={14} strokeWidth={1.5} /> Import paper
               </button>
             </div>
@@ -451,28 +551,34 @@ export default function LibraryPage() {
           <div className="tbl-body">
             {loading
               ? Array.from({ length: 6 }).map((_, i) => skRow(i))
-              : papers.map((p, i) => (
+              : filteredPapers.length === 0
+              ? (
+                <div style={{ padding: '40px 28px', textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>
+                  {searchQuery ? `No papers matching "${searchQuery}"` : 'No papers yet. Click "Import paper" to get started.'}
+                </div>
+              )
+              : filteredPapers.map((p: PaperWithTags, i: number) => (
                 <div
                   key={p.id}
-                  className={`tbl-row${p.id === activeId ? ' is-active' : ''}${p.saved ? ' is-saved' : ''}`}
+                  className={`tbl-row${p.id === activeId ? ' is-active' : ''}${p.is_bookmarked ? ' is-saved' : ''}`}
                   style={tblRowStyle(p.id === activeId, false, i % 2 === 1)}
                   onClick={() => setActiveId(p.id)}
                 >
                   <div className="col-title">
                     <span className="col-t">{p.title}</span>
-                    <span className="col-meta"><b>doi:</b> {p.doi}</span>
+                    {p.doi && <span className="col-meta"><b>doi:</b> {p.doi}</span>}
                   </div>
-                  <div className="col-authors">{p.authors}</div>
-                  <div className="col-year">{p.year}</div>
-                  <div className="col-journal">{p.journal}</div>
+                  <div className="col-authors">{p.authors ?? '—'}</div>
+                  <div className="col-year">{p.year ?? '—'}</div>
+                  <div className="col-journal">{p.journal ?? '—'}</div>
                   <div className="col-citations">
                     <Quote size={12} strokeWidth={1.5} style={{ color: 'var(--text-4)' }} />
-                    {p.cites.toLocaleString()}
+                    {(p.citation_count ?? 0).toLocaleString()}
                   </div>
                   <div className="col-tags">
-                    {p.tags.slice(0, 2).map(([name, t]) => (
-                      <span key={name} className="tag" style={{ color: TAG_COLORS[t], borderColor: TAG_BORDERS[t] }}>
-                        {name}
+                    {p.tags.slice(0, 2).map(tag => (
+                      <span key={tag.id} className="tag" style={{ color: tag.color ?? 'var(--text-3)', borderColor: `${tag.color ?? 'var(--text-3)'}44` }}>
+                        {tag.name}
                       </span>
                     ))}
                     {p.tags.length > 2 && (
@@ -482,16 +588,16 @@ export default function LibraryPage() {
                   <div className="col-actions">
                     <button
                       title="Bookmark"
-                      className={p.saved ? 'is-saved' : ''}
-                      onClick={e => toggleSaved(p.id, e)}
+                      className={p.is_bookmarked ? 'is-saved' : ''}
+                      onClick={e => toggleSaved(p.id, !!p.is_bookmarked, e)}
                     >
-                      {p.saved ? <BookmarkCheck size={14} strokeWidth={1.5} /> : <Bookmark size={14} strokeWidth={1.5} />}
+                      {p.is_bookmarked ? <BookmarkCheck size={14} strokeWidth={1.5} /> : <Bookmark size={14} strokeWidth={1.5} />}
                     </button>
                     <button title="Cite" onClick={e => e.stopPropagation()}>
                       <Quote size={14} strokeWidth={1.5} />
                     </button>
-                    <button title="Open PDF" onClick={e => e.stopPropagation()}>
-                      <FileText size={14} strokeWidth={1.5} />
+                    <button title="Open PDF" onClick={e => { e.stopPropagation(); if (p.pdf_url) window.open(p.pdf_url, '_blank'); }}>
+                      <FileText size={14} strokeWidth={1.5} style={{ opacity: p.pdf_url ? 1 : 0.4 }} />
                     </button>
                     <button title="More" onClick={e => e.stopPropagation()}>
                       <MoreHorizontal size={14} strokeWidth={1.5} />
@@ -522,7 +628,9 @@ export default function LibraryPage() {
             <div className="pdf-toolbar">
               <div className="pdf-file">
                 <span className="pdf-file-ic"><FileText size={15} strokeWidth={1.5} /></span>
-                <span className="pdf-file-name">Electrospun PCL/PVP scaffolds for skin tissue engineering</span>
+                <span className="pdf-file-name">
+                  {activePaper ? activePaper.title.slice(0, 60) + (activePaper.title.length > 60 ? '…' : '') : 'No paper selected'}
+                </span>
               </div>
               <span className="pdf-pg-num">Page 1 of 14</span>
               <span className="pdf-divider" />
@@ -539,77 +647,56 @@ export default function LibraryPage() {
 
             {/* PDF scroll area */}
             <div ref={pdfScrollRef} className="pdf-scroll">
-              <article className="page">
-                {/* pg-header */}
-                <div className="pg-header">
-                  <span>Biomaterials Science · Vol. 11 · 2024</span>
-                  <span>Setiawan et&nbsp;al. · 1 of 14</span>
-                </div>
-
-                <h2 className="paper-title">Electrospun PCL/PVP composite scaffolds for accelerated dermal wound regeneration</h2>
-                <div className="paper-authors">A. Setiawan, M. Iwasaki, L. Petrova, J. Okafor, R. Müller</div>
-                <div className="paper-affil">¹ Dept. of Biomedical Engineering, Kyoto Polytechnic · ² Institute for Soft Materials, ETH Zürich</div>
-
-                <div className="abstract-label">Abstract</div>
-                <p className="abstract">
-                  <mark className="hl" data-note="ratio">A blend of polycaprolactone (PCL) and polyvinylpyrrolidone (PVP) at a mass ratio of <b>70&nbsp;:&nbsp;30</b> was electrospun</mark>
-                  {' '}into nanofibrous scaffolds with a mean fiber diameter of&nbsp;<b>418 ± 62 nm</b>.
-                  Scaffolds were crosslinked under UV irradiation at&nbsp;<b>365&nbsp;nm</b> for 30&nbsp;minutes.{' '}
-                  <mark className="hl" data-note="result">In a murine excisional wound model, treated wounds achieved <b>92.4% closure</b> at day&nbsp;14, versus 71.8% for the PCL-only control (p &lt; 0.001).</mark>
-                  {' '}Tensile strength, porosity, and degradation behaviour were characterised, and cytocompatibility was confirmed using human dermal fibroblasts cultured for 7&nbsp;days.
-                </p>
-
-                <div className="body">
-                  <h3>1. Introduction</h3>
-                  <p>
-                    Chronic, non-healing wounds remain a substantial clinical burden, affecting an estimated 8.2 million patients
-                    in the United States alone <span className="ref">[1]</span>. Electrospun nanofibrous scaffolds have emerged as
-                    a promising platform owing to their high surface-area-to-volume ratio and morphological similarity
-                    to the native extracellular matrix <span className="ref">[2, 3]</span>.
-                  </p>
-                  <p>
-                    Polycaprolactone (PCL) is widely used due to its mechanical robustness and FDA approval, but its highly
-                    hydrophobic character limits cellular attachment. Polyvinylpyrrolidone (PVP), a hydrophilic excipient,
-                    has been shown to improve wettability and drug-loading capacity <span className="ref">[4]</span>.
-                  </p>
-
-                  <h3>2. Materials &amp; Methods</h3>
-                  <p>
-                    <mark className="hl" data-note="method">PCL (M<sub>w</sub> = 80&nbsp;kDa) and PVP (K-30) were dissolved in a chloroform / DMF (7&nbsp;:&nbsp;3 v/v) cosolvent at
-                    a total polymer concentration of <b>12% w/v</b>.</mark> Electrospinning was performed at <b>18&nbsp;kV</b>, with a
-                    tip-to-collector distance of <b>15&nbsp;cm</b> and a feed rate of <b>0.8 mL h⁻¹</b>.
-                  </p>
-                  <span className="eqn">
-                    D<sub>fiber</sub> = k · (Q/I)<sup>α</sup> · η<sup>β</sup> <span className="e-num">(1)</span>
-                  </span>
-                  <p>
-                    Scaffolds were sputter-coated with gold and imaged by SEM. Fiber diameters were measured using ImageJ
-                    (n = 200 per sample). Mechanical properties were obtained on an Instron 5965 (50&nbsp;N load cell).
-                  </p>
-
-                  <div className="figure">
-                    <div className="fig-ph" />
-                    <div className="fig-cap"><b>Fig. 1.</b> SEM micrographs of (a) PCL-only and (b) PCL/PVP 70:30 nanofibers showing a uniform morphology, with PVP incorporation producing slightly thicker fibers.</div>
+              {activePaper?.pdf_url ? (
+                /* Real PDF via iframe */
+                <iframe
+                  src={activePaper.pdf_url}
+                  style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                  title={activePaper.title}
+                />
+              ) : activePaper ? (
+                /* Metadata view when no PDF uploaded */
+                <article className="page">
+                  <div className="pg-header">
+                    <span>{activePaper.journal ?? 'Unknown Journal'}{activePaper.year ? ` · ${activePaper.year}` : ''}</span>
+                    <span>{activePaper.authors?.split(',')[0] ?? ''}{activePaper.year ? ` · ${activePaper.year}` : ''}</span>
                   </div>
 
-                  <h3>3. Results</h3>
-                  <p>
-                    Mean fiber diameter increased from 312 ± 48&nbsp;nm (PCL) to 418 ± 62&nbsp;nm with PVP addition.{' '}
-                    <mark className="hl" data-note="result-2">Tensile strength reached 4.6 ± 0.4 MPa</mark>, comparable to neonatal dermis.{' '}
-                    <mark className="hl" data-note="result-3">Water contact angle dropped from 132° to 84°</mark>, indicating dramatically improved hydrophilicity.
-                  </p>
-                  <p>
-                    Cell viability at day&nbsp;7 was 96.1 ± 2.3% on the composite versus 78.4 ± 5.1% on PCL-only scaffolds.
-                    Wound-closure data are summarised in Table&nbsp;2.
-                  </p>
-                </div>
+                  <h2 className="paper-title">{activePaper.title}</h2>
+                  {activePaper.authors && <div className="paper-authors">{activePaper.authors}</div>}
+                  {activePaper.doi && <div className="paper-affil">doi: {activePaper.doi}</div>}
 
-                {/* pg-footer */}
-                <div className="pg-footer">
-                  <span>doi:10.1039/d4bm00021a</span>
-                  <span>© 2024 The Royal Society of Chemistry</span>
+                  {activePaper.abstract ? (
+                    <>
+                      <div className="abstract-label">Abstract</div>
+                      <p className="abstract">{activePaper.abstract}</p>
+                    </>
+                  ) : (
+                    <div style={{ marginTop: 32, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>
+                      <FileText size={32} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.3 }} strokeWidth={1} />
+                      No PDF or abstract available.<br />
+                      <span style={{ fontSize: 11, fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 8, display: 'block' }}>
+                        Upload a PDF to enable full-text reading and annotation.
+                      </span>
+                    </div>
+                  )}
+
+                  {activePaper.doi && (
+                    <div className="pg-footer">
+                      <span>doi:{activePaper.doi}</span>
+                      {activePaper.year && <span>© {activePaper.year}</span>}
+                    </div>
+                  )}
+                </article>
+              ) : (
+                /* No paper selected */
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 12, color: 'var(--text-4)' }}>
+                  <FileText size={40} strokeWidth={0.8} style={{ opacity: 0.3 }} />
+                  <div style={{ fontSize: 13, textAlign: 'center' }}>
+                    Select a paper from the list above<br />to read it here.
+                  </div>
                 </div>
-              </article>
+              )}
             </div>
           </div>
 
@@ -869,6 +956,14 @@ export default function LibraryPage() {
           }}>Synced · auto</div>
         </div>
       </div>
+
+      {/* ── Import modal ── */}
+      {showImport && (
+        <ImportPaperModal
+          onClose={() => setShowImport(false)}
+          onImport={handleImport}
+        />
+      )}
     </>
   );
 }

@@ -7,6 +7,7 @@ import {
   User, Settings, LogOut, Sun, Moon,
 } from 'lucide-react';
 import { useOverlay, useCopilot, useTheme, useSignOut } from '@/components/providers/AppProviders';
+import { useUser } from '@/lib/hooks/useUser';
 
 const breadcrumbs: Record<string, string[]> = {
   '/dashboard':         ['Dashboard'],
@@ -25,6 +26,9 @@ export default function TopBar() {
   const { openSignOutModal } = useSignOut();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { user, profile } = useUser();
+  const displayName = profile?.full_name ?? user?.email?.split('@')[0] ?? 'Researcher';
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
 
   const crumbs = breadcrumbs[pathname] ?? ['Dashboard'];
 
@@ -208,7 +212,7 @@ export default function TopBar() {
               color: '#0F1117',
             }}
           >
-            A
+            {initials || 'R'}
           </button>
 
           {dropdownOpen && (
@@ -226,8 +230,8 @@ export default function TopBar() {
               animation: 'fade-in 0.1s ease',
             }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--text)' }}>Aisha Okonkwo</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>aisha@research.edu</div>
+                <div style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--text)' }}>{displayName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>{user?.email ?? ''}</div>
               </div>
               {[
                 { icon: <User size={14} />,    label: 'View Profile', action: () => setDropdownOpen(false) },
