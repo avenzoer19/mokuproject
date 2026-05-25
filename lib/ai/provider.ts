@@ -1,29 +1,27 @@
 /**
- * Moku AI Provider abstraction
- * Supports both Google Gemini and Anthropic Claude.
- * Set AI_PROVIDER=gemini (default) or AI_PROVIDER=claude in .env.local
- * Set the matching key: GEMINI_API_KEY or ANTHROPIC_API_KEY
+ * Moku Intelligence Engine — internal AI inference layer.
+ * Implementation details are intentionally abstracted.
  */
 
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 
-export type AIProvider = 'gemini' | 'claude';
+type InferenceBackend = 'gemini' | 'claude';
 
-function getProvider(): AIProvider {
+function getBackend(): InferenceBackend {
   const p = process.env.AI_PROVIDER?.toLowerCase();
   if (p === 'claude') return 'claude';
-  return 'gemini'; // default
+  return 'gemini';
 }
 
 // ── Non-streaming completion ──────────────────────────────────────────────────
 
 export async function complete(prompt: string, maxTokens = 800): Promise<string> {
-  const provider = getProvider();
+  const provider = getBackend();
 
   if (provider === 'gemini') {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+    if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
     const genAI = new GoogleGenerativeAI(apiKey);
     const model: GenerativeModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await model.generateContent({
@@ -33,9 +31,8 @@ export async function complete(prompt: string, maxTokens = 800): Promise<string>
     return result.response.text();
   }
 
-  // Claude
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
   const client = new Anthropic({ apiKey });
   const msg = await client.messages.create({
     model: 'claude-haiku-4-5',
@@ -56,12 +53,12 @@ export async function streamChat(
   messages: ChatMessage[],
   systemPrompt: string,
 ): Promise<ReadableStream<Uint8Array>> {
-  const provider = getProvider();
+  const provider = getBackend();
   const encoder = new TextEncoder();
 
   if (provider === 'gemini') {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+    if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
@@ -99,9 +96,8 @@ export async function streamChat(
     });
   }
 
-  // Claude streaming
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!apiKey) throw new Error('Moku Intelligence Engine not configured. Contact your workspace admin.');
   const client = new Anthropic({ apiKey });
 
   const anthropicMessages = messages.map(m => ({
@@ -133,10 +129,8 @@ export async function streamChat(
   });
 }
 
-// ── Provider info (for UI badges) ─────────────────────────────────────────────
+// ── Branding info (shown in UI — never expose underlying provider) ─────────────
 
 export function getProviderInfo(): { name: string; model: string } {
-  const p = getProvider();
-  if (p === 'gemini') return { name: 'Gemini', model: 'gemini-2.0-flash' };
-  return { name: 'Claude', model: 'claude-opus-4-5' };
+  return { name: 'Moku AI', model: 'Intelligence Engine v1' };
 }

@@ -603,7 +603,7 @@ export default function ScreeningPage() {
                         </button>
                         {reasoningExpanded && (
                           <div style={{ marginTop: '6px', padding: '10px 12px', background: 'var(--surface-2)', borderRadius: '0 0 10px 10px', border: '1px solid var(--line)', borderTop: 'none', fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.65, fontStyle: 'italic' }}>
-                            {isLoadingAi ? 'Claude is evaluating this paper against your criteria…' : ai.reasoning}
+                            {isLoadingAi ? 'Moku AI is evaluating this paper against your criteria…' : ai.reasoning}
                           </div>
                         )}
                       </>

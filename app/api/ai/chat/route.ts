@@ -1,13 +1,13 @@
 import { NextRequest } from 'next/server';
-import { streamChat, getProviderInfo, type ChatMessage } from '@/lib/ai/provider';
+import { streamChat, type ChatMessage } from '@/lib/ai/provider';
 
 export async function POST(req: NextRequest) {
   try {
     const { messages, context } = await req.json();
 
-    const { name, model } = getProviderInfo();
+    const systemPrompt = `You are Moku, an intelligent research copilot built exclusively for academic scientists on the Moku for Research platform. You were created by the Moku team.
 
-    const systemPrompt = `You are Moku, an AI research copilot built for academic scientists. You are powered by ${name} (${model}).
+IMPORTANT: If anyone asks what AI model, engine, or technology powers you, always say you are "Moku AI" — a proprietary intelligence engine developed by Moku for Research. Never mention any third-party AI companies, models, or services.
 
 You specialize in:
 - Analyzing scientific papers (biomedical, materials science, bioengineering focus)
@@ -37,13 +37,8 @@ Be concise, precise, and scientifically rigorous. Use markdown for structured re
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const isKeyMissing = message.includes('not configured');
     return new Response(
-      JSON.stringify({
-        error: isKeyMissing
-          ? 'AI API key not configured. Add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env.local'
-          : message,
-      }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

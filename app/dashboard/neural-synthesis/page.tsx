@@ -655,7 +655,7 @@ export default function NeuralSynthesisPage() {
               }}
             >
               <Sparkles size={13} style={{ animation: gapLoading ? 'spin 1.5s linear infinite' : 'none' }} />
-              {gapLoading ? 'Analyzing with Claude…' : gapAnalyzed ? '✓ AI Analysis Complete' : 'Analyze Gaps with Claude AI'}
+              {gapLoading ? 'Moku AI analyzing…' : gapAnalyzed ? '✓ AI Analysis Complete' : 'Analyze Gaps with Moku AI'}
             </button>
 
             {/* Gap Cards */}

@@ -29,15 +29,10 @@ export default function CopilotPanel() {
   const [activeTab, setActiveTab] = useState('chat');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState<{ name: string; model: string } | null>(null);
   const pathname = usePathname();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch('/api/ai/provider').then(r => r.json()).then(setProvider).catch(() => null);
-  }, []);
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'ai', text: "Hi! I'm your Moku research copilot. I can analyze papers, generate hypotheses, critique manuscripts, or help with experimental design. What are you working on?" },
+    { role: 'ai', text: "Hi! I'm your Moku AI research copilot. I can analyze papers, generate hypotheses, critique manuscripts, or help with experimental design. What are you working on?" },
   ]);
 
   // Auto-scroll to bottom on new messages
@@ -82,7 +77,7 @@ export default function CopilotPanel() {
           updated[updated.length - 1] = {
             role: 'ai',
             text: (err.error as string)?.toLowerCase().includes('configured')
-              ? 'AI key not configured. Add GEMINI_API_KEY to .env.local (or ANTHROPIC_API_KEY if using Claude), then restart the dev server.'
+              ? 'Moku Intelligence Engine is not active yet. Please contact your workspace administrator.'
               : `Error: ${err.error}`,
           };
           return updated;
@@ -165,17 +160,15 @@ export default function CopilotPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Sparkles size={16} style={{ color: 'var(--teal)' }} />
           <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>AI Copilot</span>
-          {provider && (
-            <span style={{
-              fontSize: '10px',
-              fontFamily: 'var(--font-geist-mono)',
-              letterSpacing: '0.1em',
-              color: 'var(--teal)',
-              background: 'var(--teal-soft)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-            }}>{provider.name}</span>
-          )}
+          <span style={{
+            fontSize: '10px',
+            fontFamily: 'var(--font-geist-mono)',
+            letterSpacing: '0.1em',
+            color: 'var(--teal)',
+            background: 'var(--teal-soft)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+          }}>Moku AI</span>
         </div>
         <button
           onClick={() => setCopilotOpen(false)}
@@ -299,7 +292,7 @@ export default function CopilotPanel() {
               <div>📄 Current page: <span style={{ color: 'var(--text)' }}>{pathname?.split('/').pop() || 'dashboard'}</span></div>
               <div>📚 Library papers: <span style={{ color: 'var(--text)' }}>7 papers (PCL/PVP scaffolds)</span></div>
               <div>🔬 Research focus: <span style={{ color: 'var(--text)' }}>Wound regeneration scaffolds</span></div>
-              <div>🤖 Model: <span style={{ color: 'var(--teal)' }}>{provider ? `${provider.name} · ${provider.model}` : '—'}</span></div>
+              <div>🤖 Engine: <span style={{ color: 'var(--teal)' }}>Moku Intelligence Engine v1</span></div>
             </div>
             <div style={{ marginTop: '16px', fontSize: '12px', color: 'var(--text-4)', lineHeight: 1.6 }}>
               Context is automatically sent with every message. Connect your library and experiments to give Claude more to work with.
