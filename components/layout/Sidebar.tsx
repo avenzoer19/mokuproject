@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Library, TestTube2, FlaskConical,
   FileText, Settings, ChevronLeft, ChevronRight,
-  Users, FolderOpen, Network, ScanSearch,
+  Users, FolderOpen, Network, ScanSearch, Languages,
 } from 'lucide-react';
 import { useSidebar } from '@/components/providers/AppProviders';
 
@@ -23,9 +23,10 @@ const mainNav: NavItem[] = [
 ];
 
 const researchNav: NavItem[] = [
-  { href: '/dashboard/dry-lab', icon: <FlaskConical size={17} />,   label: 'Dry Lab' },
-  { href: '/dashboard/wet-lab', icon: <TestTube2 size={17} />,      label: 'Wet Lab' },
-  { href: '/dashboard/studio',  icon: <FileText size={17} />,       label: 'Studio' },
+  { href: '/dashboard/dry-lab',     icon: <FlaskConical size={17} />, label: 'Dry Lab'     },
+  { href: '/dashboard/wet-lab',     icon: <TestTube2 size={17} />,    label: 'Wet Lab'     },
+  { href: '/dashboard/studio',      icon: <FileText size={17} />,     label: 'Studio'      },
+  { href: '/dashboard/translation', icon: <Languages size={17} />,    label: 'Translation' },
 ];
 
 function MokuLogo() {
