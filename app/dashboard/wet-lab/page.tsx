@@ -3,72 +3,10 @@
 import { useState } from 'react';
 import {
   GripVertical, Plus, AlertTriangle, CheckCircle2,
-  Clock, Loader2, Upload, Brain, X,
+  Clock, Loader2, Upload, X,
 } from 'lucide-react';
 import { useProtocols } from '@/lib/hooks/useProtocols';
 
-const steps = [
-  {
-    id: 1,
-    name: 'Sample Preparation',
-    status: 'done',
-    duration: '45 min',
-    params: [
-      { k: 'Cell density', v: '2×10⁶ cells/mL' },
-      { k: 'Buffer', v: 'RIPA + protease inhibitors' },
-      { k: 'Temperature', v: '4 °C' },
-    ],
-    notes: 'Spin at 14,000 rpm for 15 min. Keep on ice.',
-  },
-  {
-    id: 2,
-    name: 'Protein Quantification',
-    status: 'done',
-    duration: '30 min',
-    params: [
-      { k: 'Method', v: 'BCA Assay' },
-      { k: 'Standard range', v: '0–2,000 µg/mL' },
-      { k: 'Absorbance', v: '562 nm' },
-    ],
-    notes: 'Target 40 µg total protein per lane.',
-  },
-  {
-    id: 3,
-    name: 'SDS-PAGE',
-    status: 'running',
-    duration: '90 min',
-    params: [
-      { k: 'Gel %', v: '10% polyacrylamide' },
-      { k: 'Voltage', v: '120 V → 180 V' },
-      { k: 'Buffer', v: 'Tris-Glycine running buffer' },
-    ],
-    notes: 'Run until dye front reaches bottom of gel.',
-  },
-  {
-    id: 4,
-    name: 'Transfer (Wet)',
-    status: 'draft',
-    duration: '60–90 min',
-    params: [
-      { k: 'Membrane', v: 'PVDF (activated in MeOH)' },
-      { k: 'Current', v: '350 mA constant' },
-      { k: 'Buffer', v: 'Transfer buffer + 20% MeOH' },
-    ],
-    notes: 'Ice-cold transfer buffer. Replace ice halfway.',
-  },
-  {
-    id: 5,
-    name: 'Western Blot Detection',
-    status: 'draft',
-    duration: '120 min + overnight',
-    params: [
-      { k: 'Blocking', v: '5% BSA in TBST, 1 h' },
-      { k: 'Primary Ab', v: 'Anti-target 1:1000, 4 °C overnight' },
-      { k: 'Secondary Ab', v: 'HRP-conjugated 1:5000, 1 h RT' },
-    ],
-    notes: 'ECL detection. Expose 30 s → 5 min.',
-  },
-];
 
 const statusConfig = {
   running: { label: 'Running', color: 'var(--teal)',    bg: 'var(--teal-soft)',            icon: <Loader2 size={11} className="animate-spin" /> },
@@ -77,16 +15,6 @@ const statusConfig = {
   draft:   { label: 'Draft',   color: 'var(--text-4)', bg: 'var(--surface-2)',             icon: <Clock size={11} /> },
 } as const;
 
-const logEntries = [
-  { time: '14:32', step: 'SDS-PAGE', param: 'Voltage', expected: '120 V', actual: '118 V', delta: '−2 V', status: 'live', operator: 'A.O.' },
-  { time: '14:18', step: 'SDS-PAGE', param: 'Temperature', expected: '22 °C', actual: '23.4 °C', delta: '+1.4 °C', status: 'success', operator: 'A.O.' },
-  { time: '14:05', step: 'BCA Assay', param: 'A562 mean', expected: '0.412', actual: '0.418', delta: '+0.006', status: 'success', operator: 'K.M.' },
-  { time: '13:47', step: 'BCA Assay', param: 'Standard R²', expected: '≥0.99', actual: '0.9978', delta: '—', status: 'success', operator: 'K.M.' },
-  { time: '13:22', step: 'Sample Prep', param: 'Spin RPM', expected: '14,000', actual: '13,850', delta: '−150', status: 'partial', operator: 'A.O.' },
-  { time: '12:55', step: 'Sample Prep', param: 'Lysis time', expected: '30 min', actual: '32 min', delta: '+2 min', status: 'success', operator: 'A.O.' },
-  { time: '12:30', step: 'Sample Prep', param: 'Cell count', expected: '2.0M/mL', actual: '1.87M/mL', delta: '−6.5%', status: 'partial', operator: 'A.O.' },
-  { time: '11:48', step: 'Pre-check', param: 'Reagent lot', expected: 'AB-2024-09', actual: 'AB-2024-07', delta: '—', status: 'fail', operator: 'K.M.' },
-];
 
 const logStatusConfig = {
   live:    { label: 'Live',    color: 'var(--teal)',    bg: 'var(--teal-soft)' },
@@ -95,22 +23,6 @@ const logStatusConfig = {
   fail:    { label: 'Fail',    color: 'var(--red)',     bg: 'rgba(229,86,75,0.12)' },
 } as const;
 
-const failures = [
-  {
-    date: '2024-11-15',
-    step: 'Transfer (Wet)',
-    observation: 'Incomplete protein transfer — bands absent above 100 kDa',
-    aiCause: 'Insufficient methanol concentration in transfer buffer may have reduced membrane activation for large proteins. SDS concentration in gel too high for large proteins at given voltage.',
-    severity: 'high',
-  },
-  {
-    date: '2024-11-08',
-    step: 'Western Blot',
-    observation: 'High background across entire membrane',
-    aiCause: 'Blocking time insufficient (only 30 min instead of 60 min). Antibody concentration too high (1:500 vs. recommended 1:1000). TBST wash steps may have been too brief.',
-    severity: 'medium',
-  },
-];
 
 export default function WetLabPage() {
   const [activePanel, setActivePanel] = useState<'protocol' | 'log' | 'failures'>('protocol');
@@ -121,10 +33,9 @@ export default function WetLabPage() {
   const [showAddLog, setShowAddLog] = useState(false);
   const [logForm, setLogForm] = useState({ step_title: '', parameter: '', expected: '', actual: '', notes: '' });
 
-  // Use real data if available, otherwise show demo data
   const activeProtocol = protocols[activeProtocolIdx] ?? null;
-  const displaySteps = activeProtocol?.steps.length ? activeProtocol.steps : steps;
-  const displayLogs = logs.length ? logs : logEntries.map((l, i) => ({ ...l, id: String(i), logged_at: null, user_id: '' }));
+  const displaySteps = activeProtocol?.steps ?? [];
+  const displayLogs = logs;
 
   async function handleCreateProtocol() {
     if (!newProtocolTitle.trim()) return;
@@ -227,6 +138,12 @@ export default function WetLabPage() {
               />
               <button onClick={handleCreateProtocol} style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 8, color: '#0B3B38', fontSize: 12, fontWeight: 500, padding: '8px 14px', cursor: 'pointer' }}>Create</button>
               <button onClick={() => setShowNewProtocol(false)} style={{ appearance: 'none', background: 'transparent', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--text-3)', padding: '8px', cursor: 'pointer' }}><X size={14} /></button>
+            </div>
+          )}
+
+          {displaySteps.length === 0 && activeProtocol && (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-4)', fontSize: 13 }}>
+              No steps yet. Use the button below to add your first step.
             </div>
           )}
 
@@ -395,6 +312,13 @@ export default function WetLabPage() {
             </div>
           )}
 
+          {displayLogs.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-4)', fontSize: 13 }}>
+              No log entries yet. Add your first log entry above.
+            </div>
+          )}
+
+          {displayLogs.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}>
@@ -458,6 +382,7 @@ export default function WetLabPage() {
               })}
             </tbody>
           </table>
+          )}
         </div>
       )}
 
@@ -484,49 +409,10 @@ export default function WetLabPage() {
             <div style={{ fontSize: '12px', color: 'var(--text-4)' }}>PNG, TIFF, or JPG · AI will identify potential causes</div>
           </div>
 
-          {/* Failure entries */}
-          {failures.map((f, i) => (
-            <div key={i} style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--line)',
-              borderLeft: `3px solid ${f.severity === 'high' ? 'var(--red)' : 'var(--warn)'}`,
-              borderRadius: '14px',
-              overflow: 'hidden',
-            }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                  <span style={{
-                    fontSize: '11px',
-                    padding: '3px 8px',
-                    borderRadius: '20px',
-                    background: f.severity === 'high' ? 'rgba(229,86,75,0.12)' : 'rgba(224,169,87,0.12)',
-                    color: f.severity === 'high' ? 'var(--red)' : 'var(--warn)',
-                  }}>
-                    {f.severity === 'high' ? 'High severity' : 'Medium severity'}
-                  </span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-4)' }}>{f.date}</span>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '4px' }}>{f.step}</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-3)' }}>{f.observation}</div>
-              </div>
-
-              {/* AI cause card */}
-              <div style={{
-                padding: '14px 20px',
-                background: 'rgba(224,169,87,0.04)',
-                display: 'flex',
-                gap: '12px',
-              }}>
-                <Brain size={16} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--warn)', marginBottom: '6px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    AI Root Cause Analysis
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6 }}>{f.aiCause}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+          {/* Empty state */}
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-4)', fontSize: 13 }}>
+            No failures recorded yet. Drop an image above to analyze a failed experiment.
+          </div>
         </div>
       )}
     </div>

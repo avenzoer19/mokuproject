@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useScreening } from '@/lib/hooks/useScreening';
+import { usePapers } from '@/lib/hooks/usePapers';
 import {
   Plus, X, Play, Pause, ChevronDown, ChevronUp,
   CheckCircle2, XCircle, MinusCircle, ArrowLeft,
@@ -11,94 +12,16 @@ import {
   CheckCheck, MessageSquare,
 } from 'lucide-react';
 
-// ─────────────────────── Data ───────────────────────
-
-interface Paper {
-  id: string; title: string; authors: string;
-  year: number; journal: string; abstract: string;
-  aiConfidence: number; aiReasoning: string;
-}
-
-const PAPERS: Paper[] = [
-  {
-    id: 'p1',
-    title: 'Electrospun PCL/chitosan scaffolds loaded with paclitaxel for cervical cancer treatment: an in vivo murine model study',
-    authors: 'Chen Y., Setiawan A., Müller R.',
-    year: 2023, journal: 'Biomaterials Science',
-    abstract: 'This study reports the fabrication of coaxially electrospun polycaprolactone (PCL)/chitosan core-shell nanofibers loaded with paclitaxel (PTX) for locoregional cervical cancer therapy. Scaffolds were characterised by SEM, FTIR, and DSC. Drug release kinetics demonstrated a biphasic profile with initial burst release followed by sustained delivery over 21 days. In vivo efficacy was evaluated in a murine subcutaneous HeLa xenograft model (n=18). Tumour volume reduction of 64.3% was observed in the treatment group compared to controls (p<0.001). Histological analysis confirmed biocompatibility and absence of systemic toxicity.',
-    aiConfidence: 91,
-    aiReasoning: 'Included because: mentions in vivo cervical cancer model (HeLa xenograft), electrospun scaffold, sustained drug delivery, published 2023. Meets all inclusion criteria.',
-  },
-  {
-    id: 'p2',
-    title: 'Systematic review of nanofiber-based drug delivery systems in gynecological oncology',
-    authors: 'Okafor J., Müller R.',
-    year: 2022, journal: 'Journal of Controlled Release',
-    abstract: 'A comprehensive systematic review and meta-analysis of electrospun nanofiber platforms investigated for gynecological cancer drug delivery (2010–2022). Fifty-three studies were included following PRISMA guidelines. The review found substantial heterogeneity in fibre composition, drug loading methodology, and outcome measurement. Cervical cancer models constituted 42% of included studies. Meta-analysis of drug encapsulation efficiency reported a pooled mean of 78.4% (95% CI: 71.2–85.6%). Key limitations include lack of standardised in vitro–in vivo correlation models and limited clinical translation data.',
-    aiConfidence: 28,
-    aiReasoning: 'Excluded because: this is a systematic review / meta-analysis. Exclusion criterion "Review paper" directly applies. Contains no original experimental in vivo data.',
-  },
-  {
-    id: 'p3',
-    title: 'Coaxial electrospinning of PVP/PCL core-shell nanofibers for sustained vaginal drug delivery',
-    authors: 'Setiawan A., Petrova L., Iwasaki M.',
-    year: 2024, journal: 'ACS Applied Materials & Interfaces',
-    abstract: 'Core-shell nanofibers composed of polyvinylpyrrolidone (PVP) core and polycaprolactone (PCL) shell were fabricated via coaxial electrospinning for intravaginal drug delivery of tenofovir (TFV). Morphological characterisation by TEM confirmed core-shell architecture with mean shell thickness 180 ± 22 nm. Drug release over 14 days in simulated vaginal fluid (SVF, pH 4.2) demonstrated zero-order kinetics (R²=0.996). In vivo distribution study in New Zealand white rabbits demonstrated sustained mucosal drug levels for 72 hours post-insertion. Cytocompatibility with Vk2/E6E7 vaginal epithelial cells confirmed (viability >95%).',
-    aiConfidence: 84,
-    aiReasoning: 'Included because: coaxial electrospinning, PCL/PVP scaffold, in vivo rabbit model, vaginal drug delivery, published 2024. Meets inclusion criteria.',
-  },
-  {
-    id: 'p4',
-    title: 'Mechanical and degradation properties of crosslinked polycaprolactone scaffolds under physiological conditions',
-    authors: 'Aharon D., Chen Y.',
-    year: 2021, journal: 'Polymer Degradation and Stability',
-    abstract: 'Crosslinked polycaprolactone (PCL) scaffolds prepared by UV irradiation (365 nm, 0–60 min) were characterised for mechanical properties and in vitro degradation in PBS (pH 7.4, 37°C) over 180 days. Ultimate tensile strength increased from 4.2 ± 0.3 MPa (uncrosslinked) to 7.8 ± 0.5 MPa at 30 min UV exposure. Mass loss followed first-order kinetics; crosslinked scaffolds retained structural integrity for 120 days versus 60 days for controls. No cytotoxicity was observed against L929 fibroblasts. Results support UV crosslinking as a viable strategy for tunable degradation control.',
-    aiConfidence: 53,
-    aiReasoning: 'Uncertain: PCL scaffold with crosslinking characterisation (partially matches inclusion criteria), but no in vivo study and no cancer model. Mechanical focus may be outside scope. Manual review recommended.',
-  },
-  {
-    id: 'p5',
-    title: 'In vitro cytotoxicity of aptamer-functionalised electrospun nanofibers against HeLa and SiHa cervical cancer cell lines',
-    authors: 'Petrova L., Okafor J., Setiawan A.',
-    year: 2023, journal: 'Nanomedicine: Nanotechnology, Biology and Medicine',
-    abstract: 'Aptamer-functionalised electrospun PLGA nanofibers were evaluated for selective cytotoxicity against HeLa (HPV18+) and SiHa (HPV16+) cervical cancer cell lines. Aptamer AS1411 was conjugated to fibre surfaces via carbodiimide chemistry (conjugation efficiency 88.4%). MTT assay demonstrated IC₅₀ values of 12.4 µg/mL and 15.8 µg/mL for HeLa and SiHa respectively, with >4-fold selectivity over normal HEK293 cells. Flow cytometry confirmed G2/M cell cycle arrest. Apoptosis rate 67.3% at 72 h (Annexin V/PI). These results demonstrate promising selectivity for aptamer-targeted nanofiber platforms in cervical cancer.',
-    aiConfidence: 76,
-    aiReasoning: 'Included because: aptamer-functionalised electrospun nanofibers, cervical cancer cell lines, 2023. Note: in vitro only (no in vivo model). Inclusion criteria satisfied partially — screener judgment needed.',
-  },
-];
-
-interface ConflictRow {
-  id: string; title: string;
-  reviewer1: { decision: Decision; confidence: number; reasoning: string };
-  reviewer2: { decision: Decision; confidence: number; reasoning: string };
-}
-
-const CONFLICT_ROWS: ConflictRow[] = [
-  {
-    id: 'c1',
-    title: 'Coaxial electrospinning of PVP/PCL core-shell nanofibers for sustained vaginal drug delivery',
-    reviewer1: { decision: 'include', confidence: 84, reasoning: 'Meets all inclusion criteria: in vivo animal model, electrospun scaffold, relevant drug delivery context, within date range 2015–2025.' },
-    reviewer2: { decision: 'exclude', confidence: 55, reasoning: 'The rabbit model does not translate to cervical cancer context. Study focus is HIV prevention, not cancer therapy. Recommend exclusion under current protocol.' },
-  },
-  {
-    id: 'c2',
-    title: 'In vitro cytotoxicity of aptamer-functionalised electrospun nanofibers against HeLa and SiHa cervical cancer cell lines',
-    reviewer1: { decision: 'include', confidence: 76, reasoning: 'Cervical cancer model (HeLa/SiHa), aptamer-nanofiber system, 2023. Meets primary criteria despite in vitro limitation.' },
-    reviewer2: { decision: 'undecided', confidence: 48, reasoning: 'No in vivo component. Inclusion criteria specifies "In vivo study". Unclear whether in vitro qualifies under the current protocol. Needs clarification.' },
-  },
-  {
-    id: 'c3',
-    title: 'Nanofiber-mediated local immunotherapy in murine cervical cancer models: a pilot study',
-    reviewer1: { decision: 'exclude', confidence: 82, reasoning: 'Immunotherapy focus deviates from drug delivery scope. Nanofiber is delivery vehicle but primary outcome is immune activation, not pharmacokinetics.' },
-    reviewer2: { decision: 'include', confidence: 91, reasoning: 'In vivo murine model (inclusion criteria met), nanofiber scaffold, cervical cancer, 2022. The immunotherapy angle is still within scope of localised delivery.' },
-  },
-];
-
 // ─────────────────────── Types ───────────────────────
 
-type Decision   = 'include' | 'exclude' | 'undecided';
-type ViewState  = 'setup' | 'screening' | 'results';
-type ActiveTab  = 'screening' | 'conflicts' | 'results';
+interface ScreeningPaper {
+  id: string; title: string; authors: string;
+  year: number; journal: string; abstract: string;
+}
+
+type Decision  = 'include' | 'exclude' | 'undecided';
+type ViewState = 'setup' | 'screening' | 'results';
+type ActiveTab = 'screening' | 'conflicts' | 'results';
 
 // ─────────────────────── Helpers ───────────────────────
 
@@ -130,9 +53,20 @@ function DecisionPill({ d }: { d: Decision }) {
 // ─────────────────────── Page ───────────────────────
 
 export default function ScreeningPage() {
-  // ── DB hook ──
-  const { sessions, createSession, saveDecision, completeSession, loading: sessionsLoading } = useScreening();
+  // ── DB hooks ──
+  const { sessions, createSession, saveDecision, loading: sessionsLoading } = useScreening();
+  const { papers: libraryPapers, loading: papersLoading } = usePapers();
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  // Map library papers to screening format
+  const PAPERS: ScreeningPaper[] = libraryPapers.map(p => ({
+    id: p.id,
+    title: p.title,
+    authors: p.authors ?? '',
+    year: p.year ?? new Date().getFullYear(),
+    journal: p.journal ?? '',
+    abstract: p.abstract ?? '',
+  }));
 
   // ── View state ──
   const [viewState,   setViewState]   = useState<ViewState>('setup');
@@ -159,7 +93,7 @@ export default function ScreeningPage() {
 
   // ── Conflicts ──
   const [expandedConflict,  setExpandedConflict]  = useState<string | null>(null);
-  const [resolveModal,      setResolveModal]      = useState<ConflictRow | null>(null);
+  const [resolveModal,      setResolveModal]      = useState<{ id: string; title: string } | null>(null);
   const [resolvePick,       setResolvePick]       = useState<Decision>('include');
   const [resolved,          setResolved]          = useState<Set<string>>(new Set());
 
@@ -188,13 +122,13 @@ export default function ScreeningPage() {
         if (res.ok) {
           const data = await res.json();
           setAiResults(prev => ({ ...prev, [paper.id]: {
-            confidence: data.confidence ?? paper.aiConfidence,
+            confidence: data.confidence ?? 0,
             decision: data.decision ?? 'undecided',
-            reasoning: data.reasoning ?? paper.aiReasoning,
+            reasoning: data.reasoning ?? '',
           }}));
         }
       } catch {
-        // Fall through to use hardcoded values
+        // AI triage unavailable — show no confidence score
       } finally {
         setAiLoading(prev => ({ ...prev, [paper.id]: false }));
       }
@@ -202,15 +136,15 @@ export default function ScreeningPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewState]);
 
-  const currentCard = PAPERS[cardIdx];
-  const TOTAL_SIM   = 247;
-  const DONE_SIM    = 124 + Object.keys(decisions).length;
+  const currentCard  = PAPERS[cardIdx] ?? null;
+  const TOTAL_PAPERS = PAPERS.length;
+  const DONE_PAPERS  = Object.keys(decisions).length;
 
-  // Helper: get AI data for a paper (real result or fallback to hardcoded)
-  const getAi = (paper: Paper): AiResult => aiResults[paper.id] ?? {
-    confidence: paper.aiConfidence,
+  // Helper: get AI data for a paper (real result or default)
+  const getAi = (paper: ScreeningPaper): AiResult => aiResults[paper.id] ?? {
+    confidence: 0,
     decision: 'undecided',
-    reasoning: paper.aiReasoning,
+    reasoning: '',
   };
 
   // ── Tag helpers ──
@@ -237,8 +171,8 @@ export default function ScreeningPage() {
     }
 
     setTimeout(() => {
-      setDecisions(prev => ({ ...prev, [currentCard.id]: d }));
-      setCardIdx(prev => Math.min(prev + 1, PAPERS.length - 1));
+      setDecisions(prev => ({ ...prev, [currentCard!.id]: d }));
+      setCardIdx(prev => Math.min(prev + 1, Math.max(0, PAPERS.length - 1)));
       setReasoningExpanded(false);
       setOffset({ x: 0, y: 0 });
       setSwipeHint(null);
@@ -362,7 +296,7 @@ export default function ScreeningPage() {
                     {icons[tab]} {labels[tab]}
                     {tab === 'conflicts' && (
                       <span style={{ background: '#F59E0B22', color: '#F59E0B', border: '1px solid #F59E0B44', borderRadius: '20px', padding: '0 5px', fontSize: '10px', fontWeight: 600 }}>
-                        {CONFLICT_ROWS.length - resolved.size}
+                        0
                       </span>
                     )}
                   </button>
@@ -442,8 +376,12 @@ export default function ScreeningPage() {
                   <FileText size={16} style={{ color: 'var(--teal)' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>247 papers loaded</div>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-3)' }}>Ready to screen.</div>
+                  <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>
+                    {papersLoading ? 'Loading library…' : `${libraryPapers.length} paper${libraryPapers.length !== 1 ? 's' : ''} in your library`}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-3)' }}>
+                    {libraryPapers.length === 0 && !papersLoading ? 'Add papers to your Library first.' : 'Ready to screen.'}
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -495,7 +433,7 @@ export default function ScreeningPage() {
           <div style={{ padding: '0 22px 10px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontSize: '11.5px', color: 'var(--text-3)', fontFamily: 'monospace' }}>
-                {DONE_SIM} / {TOTAL_SIM} screened
+                {DONE_PAPERS} / {TOTAL_PAPERS} screened
               </span>
               <button
                 onClick={() => setViewState('setup')}
@@ -505,7 +443,7 @@ export default function ScreeningPage() {
               </button>
             </div>
             <div style={{ height: '3px', background: 'var(--surface-3)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${(DONE_SIM / TOTAL_SIM) * 100}%`, background: 'linear-gradient(90deg, var(--teal), var(--teal-deep))', borderRadius: '4px', transition: 'width 0.4s ease' }} />
+              <div style={{ height: '100%', width: TOTAL_PAPERS > 0 ? `${(DONE_PAPERS / TOTAL_PAPERS) * 100}%` : '0%', background: 'linear-gradient(90deg, var(--teal), var(--teal-deep))', borderRadius: '4px', transition: 'width 0.4s ease' }} />
             </div>
           </div>
 
@@ -528,7 +466,13 @@ export default function ScreeningPage() {
             ))}
 
             {/* Active card */}
-            {currentCard && !decisions[currentCard.id] ? (
+            {PAPERS.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-3)', zIndex: 10, position: 'relative' }}>
+                <FileText size={40} style={{ color: 'var(--teal)', margin: '0 auto 12px', display: 'block' }} />
+                <div style={{ fontSize: '17px', fontWeight: 400, color: 'var(--text)', marginBottom: '6px' }}>Library is empty</div>
+                <div style={{ fontSize: '13px' }}>Add papers to your Library first, then return here to screen them.</div>
+              </div>
+            ) : currentCard && !decisions[currentCard.id] ? (
               <div
                 ref={cardRef}
                 onPointerDown={onSwipeStart}
@@ -591,7 +535,7 @@ export default function ScreeningPage() {
                 {/* Card header */}
                 <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
                   <div style={{ fontSize: '10px', color: 'var(--text-4)', fontFamily: 'monospace', letterSpacing: '0.08em', marginBottom: '6px', textTransform: 'uppercase' }}>
-                    {cardIdx + 1} of {PAPERS.length} in queue
+                    {cardIdx + 1} of {TOTAL_PAPERS} in queue
                   </div>
                   <div style={{ fontSize: '16px', fontWeight: 500, color: '#E8E8E8', lineHeight: 1.35, marginBottom: '6px', paddingRight: '70px' }}>
                     {currentCard.title}
@@ -654,7 +598,7 @@ export default function ScreeningPage() {
               <div style={{ textAlign: 'center', color: 'var(--text-3)' }}>
                 <CheckCheck size={40} style={{ color: 'var(--teal)', margin: '0 auto 12px' }} />
                 <div style={{ fontSize: '17px', fontWeight: 400, color: 'var(--text)', marginBottom: '6px' }}>Queue complete</div>
-                <div style={{ fontSize: '13px' }}>All {PAPERS.length} papers in this batch have been reviewed.</div>
+                <div style={{ fontSize: '13px' }}>All {TOTAL_PAPERS} papers in your library have been reviewed.</div>
                 <button onClick={() => setActiveTab('results')} style={{ marginTop: '18px', padding: '10px 22px', borderRadius: '10px', border: 'none', background: 'var(--teal)', color: '#0F1117', fontSize: '13.5px', fontWeight: 600, cursor: 'pointer' }}>
                   View Results →
                 </button>
@@ -718,9 +662,8 @@ export default function ScreeningPage() {
           {/* Stats row */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {[
-              { label: 'Conflicts remaining', value: `${CONFLICT_ROWS.length - resolved.size}`, color: '#F59E0B' },
-              { label: 'Agreement rate',       value: '89%',                                   color: '#6FBF8A' },
-              { label: 'Papers reviewed',       value: `${DONE_SIM} / ${TOTAL_SIM}`,           color: 'var(--teal)' },
+              { label: 'Conflicts pending', value: `${resolved.size > 0 ? 0 : 0}`, color: '#F59E0B' },
+              { label: 'Papers reviewed',   value: `${DONE_PAPERS} / ${TOTAL_PAPERS}`, color: 'var(--teal)' },
             ].map(s => (
               <div key={s.label} style={{ padding: '10px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '12px', minWidth: '160px' }}>
                 <div style={{ fontSize: '18px', fontWeight: 600, color: s.color, fontFamily: 'monospace' }}>{s.value}</div>
@@ -729,20 +672,22 @@ export default function ScreeningPage() {
             ))}
           </div>
 
-          {/* Table */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '14px', overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 90px', padding: '10px 16px', borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
-              {['Paper Title', 'Reviewer 1', 'Reviewer 2', 'Action'].map(h => (
-                <div key={h} style={{ fontSize: '10px', color: 'var(--text-4)', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{h}</div>
-              ))}
+          {/* Empty state — dual-reviewer conflicts are recorded once two reviewers diverge on the same paper */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '14px', padding: '48px 24px', textAlign: 'center' }}>
+            <CheckCircle2 size={32} style={{ color: 'var(--teal)', margin: '0 auto 12px', display: 'block' }} />
+            <div style={{ fontSize: '15px', fontWeight: 400, color: 'var(--text)', marginBottom: '6px' }}>No conflicts yet</div>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-3)', maxWidth: '360px', margin: '0 auto', lineHeight: 1.6 }}>
+              Reviewer conflicts appear here when a second reviewer disagrees with an earlier decision on the same paper. Invite a collaborator to enable dual-review.
             </div>
+          </div>
 
-            {CONFLICT_ROWS.map((row, i) => {
+          {/* Future: conflict rows rendered here when dual-reviewer data exists */}
+          {false && (() => {
+              const row = { id: '', title: '', reviewer1: { decision: 'include' as Decision, confidence: 0, reasoning: '' }, reviewer2: { decision: 'include' as Decision, confidence: 0, reasoning: '' } };
               const isExpanded = expandedConflict === row.id;
               const isResolved = resolved.has(row.id);
               return (
-                <div key={row.id} style={{ borderBottom: i < CONFLICT_ROWS.length - 1 ? '1px solid var(--line-soft)' : 'none', borderLeft: isResolved ? '3px solid #6FBF8A' : '3px solid #F59E0B' }}>
+                <div key={row.id} style={{ borderBottom: '1px solid var(--line-soft)', borderLeft: isResolved ? '3px solid #6FBF8A' : '3px solid #F59E0B' }}>
                   {/* Row */}
                   <div
                     style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 90px', padding: '12px 16px', alignItems: 'center', cursor: 'pointer', transition: 'background 0.15s' }}
@@ -790,8 +735,7 @@ export default function ScreeningPage() {
                   )}
                 </div>
               );
-            })}
-          </div>
+            })()}
         </div>
       )}
 
@@ -800,10 +744,10 @@ export default function ScreeningPage() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 22px 24px' }}>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
             {[
-              { label: 'Included',   value: Object.values(decisions).filter(d => d === 'include').length   + 68, color: '#6FBF8A', icon: <CheckCircle2 size={18} /> },
-              { label: 'Excluded',   value: Object.values(decisions).filter(d => d === 'exclude').length   + 142, color: '#E5564B', icon: <XCircle size={18} /> },
-              { label: 'Undecided',  value: Object.values(decisions).filter(d => d === 'undecided').length + 14,  color: '#8B8FA8', icon: <MinusCircle size={18} /> },
-              { label: 'Remaining',  value: TOTAL_SIM - DONE_SIM,                                                 color: 'var(--text-3)', icon: <FileText size={18} /> },
+              { label: 'Included',  value: Object.values(decisions).filter(d => d === 'include').length,   color: '#6FBF8A',        icon: <CheckCircle2 size={18} /> },
+              { label: 'Excluded',  value: Object.values(decisions).filter(d => d === 'exclude').length,   color: '#E5564B',        icon: <XCircle size={18} /> },
+              { label: 'Undecided', value: Object.values(decisions).filter(d => d === 'undecided').length, color: '#8B8FA8',        icon: <MinusCircle size={18} /> },
+              { label: 'Remaining', value: TOTAL_PAPERS - DONE_PAPERS,                                     color: 'var(--text-3)', icon: <FileText size={18} /> },
             ].map(s => (
               <div key={s.label} style={{ flex: '1 1 120px', padding: '14px 18px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ color: s.color }}>{s.icon}</span>

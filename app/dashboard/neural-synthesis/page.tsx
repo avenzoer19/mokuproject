@@ -151,17 +151,13 @@ export default function NeuralSynthesisPage() {
   // Real data from DB
   const { papers: dbPapers, loading: papersLoading } = usePapers();
 
-  // Compute paper nodes from DB (or fall back to hardcoded)
-  const paperNodes: GraphNode[] = dbPapers.length > 0
-    ? dbPapers.map((p, i) => ({
-        id: p.id,
-        label: p.title.length > 60 ? p.title.slice(0, 57) + '…' : p.title,
-        type: 'paper' as const,
-        ...spherePos(i, dbPapers.length),
-      }))
-    : PAPER_NODES;
-
-  const allNodesComputed: GraphNode[] = [...paperNodes, ...GAP_NODES];
+  // Paper nodes from real DB data
+  const paperNodes: GraphNode[] = dbPapers.map((p, i) => ({
+    id: p.id,
+    label: p.title.length > 60 ? p.title.slice(0, 57) + '…' : p.title,
+    type: 'paper' as const,
+    ...spherePos(i, Math.max(1, dbPapers.length)),
+  }));
 
   // Mutable animation state (refs – no re-render cost)
   const canvasRef      = useRef<HTMLCanvasElement>(null);
@@ -183,10 +179,19 @@ export default function NeuralSynthesisPage() {
   const [sheetOpen,         setSheetOpen]         = useState(false);
   const [miniCard,          setMiniCard]          = useState<{ node: GraphNode; sx: number; sy: number } | null>(null);
 
-  // AI gap analysis state
-  const [aiGaps,       setAiGaps]       = useState<GapCardData[]>(GAP_CARDS);
+  // AI gap analysis state (starts empty — filled by runGapAnalysis)
+  const [aiGaps,       setAiGaps]       = useState<GapCardData[]>([]);
   const [gapLoading,   setGapLoading]   = useState(false);
   const [gapAnalyzed,  setGapAnalyzed]  = useState(false);
+
+  // Map AI gap results to graph nodes (must be after aiGaps state)
+  const gapGraphNodes: GraphNode[] = aiGaps.map((g, i) => ({
+    id: g.id,
+    label: `Gap: ${g.title.length > 55 ? g.title.slice(0, 52) + '…' : g.title}`,
+    type: 'gap' as const,
+    ...spherePos(paperNodes.length + i, Math.max(1, paperNodes.length + aiGaps.length)),
+  }));
+  const allNodesComputed: GraphNode[] = [...paperNodes, ...gapGraphNodes];
 
   const runGapAnalysis = useCallback(async () => {
     if (gapLoading || gapAnalyzed) return;
@@ -213,7 +218,7 @@ export default function NeuralSynthesisPage() {
             title: g.title,
             explanation: g.description,
             confidence: Math.min(98, Math.max(60, g.confidence)),
-            connectedTo: g.relatedPaperIds ?? GAP_CARDS[i]?.connectedTo ?? [],
+            connectedTo: g.relatedPaperIds ?? [],
           }));
           setAiGaps(mapped);
           setGapAnalyzed(true);
@@ -474,7 +479,9 @@ export default function NeuralSynthesisPage() {
               Neural Synthesis <em style={{ color: 'var(--teal)', fontStyle: 'italic' }}>&</em> Gap Finder
             </h1>
             <div style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }}>
-              {paperNodes.length} papers indexed · {aiGaps.length} research gaps detected · AI confidence 79–87%
+              {papersLoading ? 'Loading library…' : `${paperNodes.length} paper${paperNodes.length !== 1 ? 's' : ''} indexed`}
+              {aiGaps.length > 0 && ` · ${aiGaps.length} research gap${aiGaps.length !== 1 ? 's' : ''} detected`}
+              {paperNodes.length === 0 && !papersLoading && ' · Add papers to your Library to begin'}
             </div>
           </div>
           {/* Legend */}
@@ -507,6 +514,16 @@ export default function NeuralSynthesisPage() {
 
         {/* ── LEFT: 3D Graph Canvas ── */}
         <div style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', background: '#0F1117', border: '1px solid var(--line)' }}>
+
+          {/* Empty state when library has no papers */}
+          {!papersLoading && dbPapers.length === 0 && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 10, pointerEvents: 'none' }}>
+              <FileText size={36} style={{ color: 'rgba(78,205,196,0.4)' }} />
+              <div style={{ fontSize: 15, fontWeight: 400, color: 'rgba(232,232,232,0.6)', textAlign: 'center' }}>No papers in your library yet</div>
+              <div style={{ fontSize: 12, color: 'rgba(139,143,168,0.6)', textAlign: 'center', maxWidth: 260 }}>Add papers in the Library and run Gap Analysis to build your knowledge graph.</div>
+            </div>
+          )}
+
           <canvas
             ref={canvasRef}
             style={{ width: '100%', height: '100%', display: 'block', cursor: 'grab', touchAction: 'none' }}
