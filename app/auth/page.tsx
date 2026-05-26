@@ -162,6 +162,10 @@ export default function AuthPage() {
   const [resetSent, setResetSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [signedUp, setSignedUp] = useState(false);
+  const [signedUpEmail, setSignedUpEmail] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -190,17 +194,29 @@ export default function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name } },
+          options: {
+            data: { full_name: name },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
         });
         if (error) { setError(error.message); return; }
         setError('');
-        // Show confirmation message — email verification may be required
-        alert('Account created! Check your email to confirm your account, then sign in.');
-        setMode('signin');
+        // Mark as new user for dashboard welcome banner
+        try { localStorage.setItem('moku_new_user', 'true'); } catch {}
+        setSignedUpEmail(email);
+        setSignedUp(true);
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendConfirmation = async () => {
+    setResendLoading(true);
+    await supabase.auth.resend({ type: 'signup', email: signedUpEmail });
+    setResendLoading(false);
+    setResendSent(true);
+    setTimeout(() => setResendSent(false), 5000);
   };
 
   const handleForgotPassword = async (e: React.MouseEvent | React.FormEvent) => {
@@ -363,6 +379,52 @@ export default function AuthPage() {
               </button>
             ))}
           </div>
+
+          {/* ── Signed-up success state ──────────────────────── */}
+          {signedUp ? (
+            <div style={{ animation: 'fade-in 0.35s ease' }}>
+              {/* Envelope illustration */}
+              <div style={{ width: '64px', height: '64px', margin: '0 0 24px', background: 'rgba(78,205,196,0.1)', border: '1px solid rgba(78,205,196,0.25)', borderRadius: '18px', display: 'grid', placeItems: 'center' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M2 7l10 7 10-7" />
+                </svg>
+              </div>
+
+              <div style={{ fontSize: '22px', fontWeight: 300, color: 'var(--text)', marginBottom: '8px' }}>
+                Check your inbox
+              </div>
+              <p style={{ fontSize: '14px', color: 'var(--text-3)', lineHeight: 1.7, marginBottom: '6px' }}>
+                We sent a verification link to
+              </p>
+              <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '28px', wordBreak: 'break-all' }}>
+                {signedUpEmail}
+              </p>
+
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px 18px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-3)', lineHeight: 1.7, margin: 0 }}>
+                  Click the link in the email to activate your Moku account. If you don&apos;t see it, check your spam folder.
+                </p>
+              </div>
+
+              {/* Resend button */}
+              <button
+                onClick={handleResendConfirmation}
+                disabled={resendLoading || resendSent}
+                style={{ width: '100%', height: '44px', background: resendSent ? 'rgba(111,191,138,0.12)' : 'var(--surface)', border: `1px solid ${resendSent ? 'rgba(111,191,138,0.4)' : 'var(--line)'}`, borderRadius: '10px', color: resendSent ? 'var(--success)' : 'var(--text-2)', fontSize: '14px', cursor: (resendLoading || resendSent) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px', transition: 'all 0.2s' }}
+              >
+                {resendLoading ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</> : resendSent ? <><CheckCircle2 size={15} /> Email resent!</> : 'Resend verification email'}
+              </button>
+
+              <button
+                onClick={() => { setSignedUp(false); setMode('signin'); setEmail(signedUpEmail); setPassword(''); }}
+                style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: '13px', cursor: 'pointer', padding: '8px 0' }}
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+          <>
 
           {/* Forgot password flow */}
           {forgotMode ? (
@@ -615,6 +677,8 @@ export default function AuthPage() {
                 </button>
               </div>
             </>
+          )}
+          </>
           )}
         </div>
       </div>

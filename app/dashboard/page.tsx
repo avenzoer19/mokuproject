@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Library, FlaskConical, TestTube2, FileText,
   TrendingUp, Beaker, Quote, BookOpen,
-  Network, ScanSearch, ArrowRight, Plus,
+  Network, ScanSearch, ArrowRight, Plus, X, Sparkles,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useUser } from '@/lib/hooks/useUser';
@@ -76,6 +76,17 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Show welcome banner for new users (flag set during signup)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('moku_new_user') === 'true') {
+        setShowWelcome(true);
+        localStorage.removeItem('moku_new_user');
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -132,6 +143,30 @@ export default function DashboardPage() {
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: '32px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+
+      {/* Welcome banner — shown once for new users after email confirmation */}
+      {showWelcome && (
+        <div style={{ background: 'linear-gradient(135deg, rgba(78,205,196,0.12) 0%, rgba(78,205,196,0.05) 100%)', border: '1px solid rgba(78,205,196,0.3)', borderRadius: '16px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px', animation: 'fade-in 0.4s ease' }}>
+          <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(78,205,196,0.15)', flexShrink: 0, display: 'grid', placeItems: 'center', color: 'var(--teal)' }}>
+            <Sparkles size={18} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '2px' }}>
+              Welcome to Moku! Your account is active.
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>
+              Start by importing your first paper into the Library, or explore the workspace modules below.
+            </p>
+          </div>
+          <button onClick={() => setShowWelcome(false)}
+            style={{ background: 'none', border: 'none', color: 'var(--text-4)', cursor: 'pointer', padding: '4px', borderRadius: '6px', flexShrink: 0 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-4)'; }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>

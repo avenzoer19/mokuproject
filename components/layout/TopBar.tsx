@@ -10,11 +10,14 @@ import { useOverlay, useCopilot, useTheme, useSignOut } from '@/components/provi
 import { useUser } from '@/lib/hooks/useUser';
 
 const breadcrumbs: Record<string, string[]> = {
-  '/dashboard':         ['Dashboard'],
-  '/dashboard/library': ['Dashboard', 'Library'],
-  '/dashboard/dry-lab': ['Dashboard', 'Dry Lab'],
-  '/dashboard/wet-lab': ['Dashboard', 'Wet Lab'],
-  '/dashboard/studio':  ['Dashboard', 'Studio'],
+  '/dashboard':                   ['Dashboard'],
+  '/dashboard/library':           ['Dashboard', 'Library'],
+  '/dashboard/screening':         ['Dashboard', 'Screening'],
+  '/dashboard/neural-synthesis':  ['Dashboard', 'Neural Synthesis'],
+  '/dashboard/dry-lab':           ['Dashboard', 'Dry Lab'],
+  '/dashboard/wet-lab':           ['Dashboard', 'Wet Lab'],
+  '/dashboard/studio':            ['Dashboard', 'Studio'],
+  '/dashboard/translation':       ['Dashboard', 'Translation Engine'],
 };
 
 export default function TopBar() {
