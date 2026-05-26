@@ -117,7 +117,7 @@ function FragmentSection() {
     'Manuscript drafted in a disconnected text editor',
   ];
   return (
-    <section style={{ maxWidth: '1100px', margin: '0 auto', padding: '120px 40px 140px' }}>
+    <section style={{ maxWidth: '1100px', margin: '0 auto', padding: '160px 40px 140px' }}>
       <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase', color: D.accent, marginBottom: '28px' }}>
         The problem
       </p>
@@ -483,9 +483,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── DARK SECTIONS ────────────────────────────────────── */}
-      <div style={{ background: D.bg, position: 'relative', zIndex: 3 }}>
-        {/* Cream → dark gradient transition */}
-        <div style={{ height: '140px', background: 'linear-gradient(to bottom, #F8F6F1 0%, #0F1117 100%)', marginTop: '-1px' }} />
+      <div style={{ background: D.bg, position: 'relative', zIndex: 3, borderTop: '1px solid #E2E0DB' }}>
 
         <FragmentSection />
         <PillarsSection sectionRef={pillarSectionRef} activePillar={activePillar} />
