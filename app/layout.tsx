@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import AppProviders from '@/components/providers/AppProviders';
@@ -71,18 +71,49 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0F1117' },
+    { media: '(prefers-color-scheme: light)', color: '#F8F6F1' },
+  ],
+  colorScheme: 'dark light',
+  width: 'device-width',
+  initialScale: 1,
+};
+
 const jsonLd = {
   '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: 'Moku for Research',
-  url: SITE_URL,
-  applicationCategory: 'EducationalApplication',
-  operatingSystem: 'Web',
-  inLanguage: 'id',
-  description:
-    'Platform riset all-in-one berbasis AI untuk akademisi Indonesia: pencarian & review jurnal, screening literatur, terjemahan dokumen ilmiah, manajemen data lab, dan penulisan manuskrip dalam satu workspace.',
-  offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
-  creator: { '@type': 'Person', name: 'Rifqi Aditya', jobTitle: 'Biomedical Engineering' },
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: 'Moku for Research',
+      url: SITE_URL,
+      logo: `${SITE_URL}/icon`,
+      slogan: 'Science for Everyone',
+      founder: { '@type': 'Person', name: 'Rifqi Aditya', jobTitle: 'Biomedical Engineering' },
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: 'Moku for Research',
+      inLanguage: 'id',
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Moku for Research',
+      url: SITE_URL,
+      applicationCategory: 'EducationalApplication',
+      operatingSystem: 'Web',
+      inLanguage: 'id',
+      description:
+        'Platform riset all-in-one berbasis AI untuk akademisi Indonesia: pencarian & review jurnal, screening literatur, terjemahan dokumen ilmiah, manajemen data lab, dan penulisan manuskrip dalam satu workspace.',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

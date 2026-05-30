@@ -159,9 +159,6 @@ function FragmentSection() {
 
 /* ── SECTION 2 — 4 Pillars sticky scroll ─────────────────────── */
 function PillarsSection({ sectionRef, activePillar }: { sectionRef: React.RefObject<HTMLDivElement>; activePillar: number }) {
-  const active = PILLARS[activePillar];
-  const ActiveIcon = active.Icon;
-
   return (
     <section style={{ position: 'relative', borderTop: `1px solid ${D.border}` }}>
       <div ref={sectionRef} style={{ height: '400vh', position: 'relative' }}>
@@ -189,45 +186,60 @@ function PillarsSection({ sectionRef, activePillar }: { sectionRef: React.RefObj
             </div>
           </div>
 
-          {/* Right — morphing content card */}
+          {/* Right — morphing content card. All 4 pillars stay in the DOM (stacked)
+              so Googlebot crawls every pillar's copy; only the active one is visible. */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '60px 64px' }}>
-            <div key={activePillar} style={{ animation: 'pillarFadeUp 0.45s cubic-bezier(0.4,0,0.2,1) both' }}>
+            <div style={{ display: 'grid' }}>
+              {PILLARS.map((p, i) => {
+                const isActive = activePillar === i;
+                const PIcon = p.Icon;
+                return (
+                  <article
+                    key={p.num}
+                    aria-hidden={!isActive}
+                    style={{
+                      gridArea: '1 / 1',
+                      opacity: isActive ? 1 : 0,
+                      transform: isActive ? 'translateY(0)' : 'translateY(18px)',
+                      visibility: isActive ? 'visible' : 'hidden',
+                      pointerEvents: isActive ? 'auto' : 'none',
+                      transition: 'opacity 0.45s cubic-bezier(0.4,0,0.2,1), transform 0.45s cubic-bezier(0.4,0,0.2,1)',
+                    }}
+                  >
+                    <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(78,205,196,0.1)', border: '1px solid rgba(78,205,196,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '28px', color: D.accent }}>
+                      <PIcon size={20} />
+                    </div>
 
-              <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(78,205,196,0.1)', border: '1px solid rgba(78,205,196,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '28px', color: D.accent }}>
-                <ActiveIcon size={20} />
-              </div>
+                    <h3 style={{ fontSize: 'clamp(22px, 2.8vw, 36px)', fontWeight: 300, letterSpacing: '-0.03em', color: D.text, lineHeight: 1.2, marginBottom: '20px' }}>
+                      {p.title}
+                    </h3>
+                    <p style={{ fontSize: '15px', color: D.muted, lineHeight: 1.8, marginBottom: '36px', maxWidth: '480px' }}>
+                      {p.body}
+                    </p>
 
-              <h3 style={{ fontSize: 'clamp(22px, 2.8vw, 36px)', fontWeight: 300, letterSpacing: '-0.03em', color: D.text, lineHeight: 1.2, marginBottom: '20px' }}>
-                {active.title}
-              </h3>
-              <p style={{ fontSize: '15px', color: D.muted, lineHeight: 1.8, marginBottom: '36px', maxWidth: '480px' }}>
-                {active.body}
-              </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {p.tags.map(tag => (
+                        <span key={tag} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '20px', background: 'rgba(78,205,196,0.07)', border: '1px solid rgba(78,205,196,0.18)', color: D.accent, fontFamily: 'var(--font-geist-mono)', letterSpacing: '0.04em' }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {active.tags.map(tag => (
-                  <span key={tag} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '20px', background: 'rgba(78,205,196,0.07)', border: '1px solid rgba(78,205,196,0.18)', color: D.accent, fontFamily: 'var(--font-geist-mono)', letterSpacing: '0.04em' }}>
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* Progress indicator */}
-              <div style={{ display: 'flex', gap: '6px', marginTop: '48px' }}>
-                {PILLARS.map((_, i) => (
-                  <div key={i} style={{ height: '2px', borderRadius: '2px', flex: i === activePillar ? 3 : 1, background: i === activePillar ? D.accent : D.border, transition: 'all 0.5s cubic-bezier(0.4,0,0.2,1)' }} />
-                ))}
-              </div>
+                    {/* Progress indicator */}
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '48px' }}>
+                      {PILLARS.map((_, j) => (
+                        <div key={j} style={{ height: '2px', borderRadius: '2px', flex: j === activePillar ? 3 : 1, background: j === activePillar ? D.accent : D.border, transition: 'all 0.5s cubic-bezier(0.4,0,0.2,1)' }} />
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes pillarFadeUp {
-          from { opacity: 0; transform: translateY(18px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
         @media (max-width: 768px) {
           .pillars-grid { grid-template-columns: 1fr !important; }
         }
