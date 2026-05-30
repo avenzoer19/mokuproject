@@ -7,14 +7,87 @@ import ShortcutMap from '@/components/overlays/ShortcutMap';
 import GlobalKeyboard from '@/components/overlays/GlobalKeyboard';
 import './globals.css';
 
+const SITE_URL = 'https://mokuresearch.com';
+
 export const metadata: Metadata = {
-  title: 'Moku for Research',
-  description: 'All-in-one academic research platform',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Moku for Research — Asisten Riset AI & Platform Riset All-in-One',
+    template: '%s · Moku for Research',
+  },
+  description:
+    'Platform riset all-in-one berbasis AI untuk akademisi Indonesia: cari & review jurnal, screening literatur, terjemahkan dokumen ilmiah, kelola data lab, hingga menulis skripsi, tesis, dan manuskrip — dalam satu workspace yang tenang.',
+  keywords: [
+    'aplikasi asisten riset AI',
+    'ai pencari jurnal ilmiah',
+    'asisten peneliti ai',
+    'tools ai untuk riset akademik',
+    'platform riset all in one',
+    'aplikasi penelitian terintegrasi',
+    'software ekosistem riset',
+    'platform manajemen data ilmiah',
+    'software manajemen skripsi tesis',
+    'aplikasi bantu skripsi',
+    'tools untuk mempermudah tesis',
+    'software penyusun jurnal ilmiah mahasiswa',
+    'alat bantu review jurnal AI',
+    'ai untuk merangkum jurnal',
+    'cara review paper cepat dengan ai',
+    'tools screening literatur otomatis',
+    'aplikasi catat jurnal otomatis',
+    'software pencatat referensi otomatis',
+    'manajemen sitasi jurnal',
+  ],
+  authors: [{ name: 'Rifqi Aditya' }],
+  creator: 'Rifqi Aditya',
+  applicationName: 'Moku for Research',
+  category: 'education',
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    locale: 'id_ID',
+    url: SITE_URL,
+    siteName: 'Moku for Research',
+    title: 'Moku for Research — Asisten Riset AI & Platform Riset All-in-One',
+    description:
+      'Satukan literatur, screening, terjemahan, data lab, dan penulisan manuskrip dalam satu workspace riset berbasis AI. Dibuat untuk mahasiswa, dosen, dan peneliti Indonesia.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Moku for Research — Platform Riset All-in-One Berbasis AI',
+    description:
+      'Satukan literatur, screening, terjemahan, data lab, dan penulisan manuskrip dalam satu workspace riset berbasis AI untuk akademisi Indonesia.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
+};
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Moku for Research',
+  url: SITE_URL,
+  applicationCategory: 'EducationalApplication',
+  operatingSystem: 'Web',
+  inLanguage: 'id',
+  description:
+    'Platform riset all-in-one berbasis AI untuk akademisi Indonesia: pencarian & review jurnal, screening literatur, terjemahan dokumen ilmiah, manajemen data lab, dan penulisan manuskrip dalam satu workspace.',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'IDR' },
+  creator: { '@type': 'Person', name: 'Rifqi Aditya', jobTitle: 'Biomedical Engineering' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="id" data-theme="dark" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -30,6 +103,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body style={{ fontFamily: 'var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif' }}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <AppProviders>
           <GlobalKeyboard />
           <CommandPalette />

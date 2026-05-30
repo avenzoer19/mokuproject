@@ -186,7 +186,16 @@ export default function AuthPage() {
     try {
       if (mode === 'signin') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) { setError(error.message); return; }
+        if (error) {
+          // "Email not confirmed" — show resend flow instead of raw error
+          if (error.message.toLowerCase().includes('email not confirmed') || error.message.toLowerCase().includes('not confirmed')) {
+            setSignedUpEmail(email);
+            setSignedUp(true);
+            return;
+          }
+          setError(error.message);
+          return;
+        }
         router.push('/dashboard');
         router.refresh();
       } else {
@@ -213,10 +222,12 @@ export default function AuthPage() {
 
   const handleResendConfirmation = async () => {
     setResendLoading(true);
-    await supabase.auth.resend({ type: 'signup', email: signedUpEmail });
+    const { error } = await supabase.auth.resend({ type: 'signup', email: signedUpEmail });
     setResendLoading(false);
-    setResendSent(true);
-    setTimeout(() => setResendSent(false), 5000);
+    if (!error) {
+      setResendSent(true);
+      setTimeout(() => setResendSent(false), 6000);
+    }
   };
 
   const handleForgotPassword = async (e: React.MouseEvent | React.FormEvent) => {
@@ -394,33 +405,60 @@ export default function AuthPage() {
               <div style={{ fontSize: '22px', fontWeight: 300, color: 'var(--text)', marginBottom: '8px' }}>
                 Check your inbox
               </div>
-              <p style={{ fontSize: '14px', color: 'var(--text-3)', lineHeight: 1.7, marginBottom: '6px' }}>
+              <p style={{ fontSize: '13.5px', color: 'var(--text-3)', lineHeight: 1.6, marginBottom: '6px' }}>
                 We sent a verification link to
               </p>
-              <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '28px', wordBreak: 'break-all' }}>
+              <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '24px', wordBreak: 'break-all' }}>
                 {signedUpEmail}
               </p>
 
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px 18px', marginBottom: '24px' }}>
-                <p style={{ fontSize: '13px', color: 'var(--text-3)', lineHeight: 1.7, margin: 0 }}>
-                  Click the link in the email to activate your Moku account. If you don&apos;t see it, check your spam folder.
+              {/* Checklist */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '12px', padding: '16px 18px', marginBottom: '20px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-4)', fontFamily: 'var(--font-geist-mono)', marginBottom: '12px' }}>
+                  Not seeing it?
                 </p>
+                {[
+                  'Check your Spam or Junk folder',
+                  'The email arrives from noreply@mokuresearch.com',
+                  'Wait up to 2 minutes — delivery can be brief',
+                  'Try the resend button below',
+                ].map((tip, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: i < 3 ? '9px' : 0 }}>
+                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--teal)', marginTop: '6px', flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', color: 'var(--text-3)', lineHeight: 1.5 }}>{tip}</span>
+                  </div>
+                ))}
               </div>
 
               {/* Resend button */}
               <button
                 onClick={handleResendConfirmation}
                 disabled={resendLoading || resendSent}
-                style={{ width: '100%', height: '44px', background: resendSent ? 'rgba(111,191,138,0.12)' : 'var(--surface)', border: `1px solid ${resendSent ? 'rgba(111,191,138,0.4)' : 'var(--line)'}`, borderRadius: '10px', color: resendSent ? 'var(--success)' : 'var(--text-2)', fontSize: '14px', cursor: (resendLoading || resendSent) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px', transition: 'all 0.2s' }}
+                style={{
+                  width: '100%', height: '44px',
+                  background: resendSent ? 'rgba(111,191,138,0.12)' : 'var(--surface)',
+                  border: `1px solid ${resendSent ? 'rgba(111,191,138,0.4)' : 'var(--line)'}`,
+                  borderRadius: '10px',
+                  color: resendSent ? 'var(--success)' : 'var(--text-2)',
+                  fontSize: '14px',
+                  cursor: (resendLoading || resendSent) ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  marginBottom: '10px',
+                  transition: 'all 0.2s',
+                }}
               >
-                {resendLoading ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</> : resendSent ? <><CheckCircle2 size={15} /> Email resent!</> : 'Resend verification email'}
+                {resendLoading
+                  ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Sending…</>
+                  : resendSent
+                    ? <><CheckCircle2 size={15} /> Sent! Check your inbox.</>
+                    : 'Resend verification email'}
               </button>
 
               <button
-                onClick={() => { setSignedUp(false); setMode('signin'); setEmail(signedUpEmail); setPassword(''); }}
+                onClick={() => { setSignedUp(false); setMode('signup'); setEmail(signedUpEmail); setPassword(''); setConfirmPassword(''); }}
                 style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-3)', fontSize: '13px', cursor: 'pointer', padding: '8px 0' }}
               >
-                Back to sign in
+                Wrong email? Go back
               </button>
             </div>
           ) : (

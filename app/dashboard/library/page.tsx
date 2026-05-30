@@ -3,29 +3,198 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Search, SlidersHorizontal, Plus, Calendar, BookMarked, Atom, Quote,
-  Unlock, Highlighter, ChevronDown, ChevronUp, Minus, List, Download,
+  Unlock, Highlighter, ChevronDown, ChevronUp, Minus, List, Download, Upload,
   FileText, Bookmark, BookmarkCheck, MoreHorizontal, FlaskConical, Layers,
-  BarChart3, ArrowUpRight, Check, Sparkles, MessageSquareText, Link2, X,
+  BarChart3, ArrowUpRight, Check, Sparkles, MessageSquareText, Link2, X, AlertCircle,
 } from 'lucide-react';
 import { usePapers, PaperWithTags } from '@/lib/hooks/usePapers';
 import { useUser } from '@/lib/hooks/useUser';
 import { createClient } from '@/lib/supabase/client';
+
+/* ─── Garuda type ────────────────────────────────────────────── */
+interface GarudaResult {
+  id: string;
+  title: string;
+  authors: string[];
+  journal: string;
+  publisher: string;
+  abstract: string;
+  doi: string | null;
+  year: number | null;
+  detailUrl: string;
+  downloadUrl: string | null;
+}
+
+/* ─── ArXiv types & feed parser ──────────────────────────────── */
+interface ArxivPaper {
+  id: string;
+  title: string;
+  summary: string;
+  year: number | null;
+  authors: string[];
+  categories: string[];
+}
+
+function parseArxivFeed(xml: string): ArxivPaper[] {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const NS = 'http://www.w3.org/2005/Atom';
+  return Array.from(doc.getElementsByTagNameNS(NS, 'entry')).map(e => {
+    const text = (tag: string) => e.getElementsByTagNameNS(NS, tag)[0]?.textContent?.trim() ?? '';
+    const rawId = text('id');
+    const id = rawId.split('/abs/').pop()?.replace(/v\d+$/, '') ?? rawId;
+    const published = text('published');
+    const authors = Array.from(e.getElementsByTagNameNS(NS, 'author'))
+      .map(a => a.getElementsByTagNameNS(NS, 'name')[0]?.textContent?.trim() ?? '')
+      .filter(Boolean);
+    const categories = Array.from(e.getElementsByTagNameNS(NS, 'category'))
+      .map(c => c.getAttribute('term') ?? '').filter(Boolean);
+    return {
+      id,
+      title: text('title').replace(/\s+/g, ' '),
+      summary: text('summary').replace(/\s+/g, ' '),
+      year: published ? parseInt(published.slice(0, 4)) : null,
+      authors,
+      categories,
+    };
+  });
+}
 
 /* ─── Import Paper Modal ──────────────────────────────────────── */
 function ImportPaperModal({ onClose, onImport }: {
   onClose: () => void;
   onImport: (data: { title: string; authors: string; year: number | null; journal: string; doi: string; abstract: string; citation_count: number | null; file: File | null }) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<'arxiv' | 'garuda' | 'manual'>('arxiv');
+
+  /* arXiv state */
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<ArxivPaper[]>([]);
+  const [arxivStatus, setArxivStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [importing, setImporting] = useState<string | null>(null);
+
+  /* Garuda state */
+  const [garudaQuery, setGarudaQuery] = useState('');
+  const [garudaResults, setGarudaResults] = useState<GarudaResult[]>([]);
+  const [garudaStatus, setGarudaStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [garudaImporting, setGarudaImporting] = useState<string | null>(null);
+
+  /* Manual form state */
   const [form, setForm] = useState({ title: '', authors: '', year: '', journal: '', doi: '', abstract: '', citation_count: '' });
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingMsg, setSavingMsg] = useState('');
   const [error, setError] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extractErr, setExtractErr] = useState('');
+  const [filledFields, setFilledFields] = useState<Set<string>>(new Set());
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+  const setField = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  async function submit(e: React.FormEvent) {
+  async function handleArxivSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    setArxivStatus('loading');
+    setResults([]);
+    try {
+      const isId = /^\d{4}\.\d{4,5}(v\d+)?$/.test(q);
+      const searchQ = isId ? `id:${q}` : `all:${q}`;
+      const res = await fetch(`/api/arxiv?q=${encodeURIComponent(searchQ)}&max=8`);
+      if (!res.ok) throw new Error();
+      setResults(parseArxivFeed(await res.text()));
+      setArxivStatus('done');
+    } catch {
+      setArxivStatus('error');
+    }
+  }
+
+  async function handleArxivImport(paper: ArxivPaper) {
+    setImporting(paper.id);
+    try {
+      await onImport({
+        title: paper.title,
+        authors: paper.authors.join(', '),
+        year: paper.year,
+        journal: paper.categories[0] ?? '',
+        doi: `arxiv:${paper.id}`,
+        abstract: paper.summary,
+        citation_count: null,
+        file: null,
+      });
+      onClose();
+    } catch {
+      setImporting(null);
+    }
+  }
+
+  async function handleGarudaSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = garudaQuery.trim();
+    if (!q) return;
+    setGarudaStatus('loading');
+    setGarudaResults([]);
+    try {
+      const res = await fetch(`/api/garuda?q=${encodeURIComponent(q)}&max=8`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Garuda search failed');
+      setGarudaResults(data.results ?? []);
+      setGarudaStatus('done');
+    } catch (e) {
+      setGarudaStatus('error');
+    }
+  }
+
+  async function handleGarudaImport(r: GarudaResult) {
+    setGarudaImporting(r.id);
+    try {
+      await onImport({
+        title: r.title,
+        authors: r.authors.join(', '),
+        year: r.year,
+        journal: r.journal,
+        doi: r.doi ?? `garuda:${r.id}`,
+        abstract: r.abstract,
+        citation_count: null,
+        file: null,
+      });
+      onClose();
+    } catch {
+      setGarudaImporting(null);
+    }
+  }
+
+  async function extractMetadata(fileOverride?: File) {
+    const file = fileOverride ?? pdfFile;
+    if (!file || extracting) return;
+    setExtracting(true);
+    setExtractErr('');
+    try {
+      const fd = new FormData();
+      fd.append('pdf', file);
+      const res = await fetch('/api/papers/extract', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Extraction failed');
+      const filled = new Set<string>();
+      setForm(prev => {
+        const next = { ...prev };
+        if (data.title)    { next.title          = data.title;        filled.add('title'); }
+        if (data.authors)  { next.authors         = data.authors;      filled.add('authors'); }
+        if (data.year)     { next.year            = String(data.year); filled.add('year'); }
+        if (data.journal)  { next.journal         = data.journal;      filled.add('journal'); }
+        if (data.doi)      { next.doi             = data.doi;          filled.add('doi'); }
+        if (data.abstract) { next.abstract        = data.abstract;     filled.add('abstract'); }
+        return next;
+      });
+      setFilledFields(filled);
+      setTimeout(() => setFilledFields(new Set()), 3500);
+    } catch (e) {
+      setExtractErr(e instanceof Error ? e.message : 'Extraction failed');
+    }
+    setExtracting(false);
+  }
+
+  async function submitManual(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) { setError('Title is required'); return; }
     setSaving(true);
@@ -46,106 +215,353 @@ function ImportPaperModal({ onClose, onImport }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 20, padding: '28px 28px 24px', width: 'min(560px, 94vw)', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 20, padding: '24px 24px 20px', width: 'min(620px, 94vw)', display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '88vh', overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 17, fontWeight: 400, color: 'var(--text)' }}>Import Paper</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Add paper metadata to your library</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              {tab === 'arxiv' ? 'Search arXiv database' : 'Add paper details manually'}
+            </div>
           </div>
           <button onClick={onClose} style={{ appearance: 'none', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 6 }}>
             <X size={18} strokeWidth={1.5} />
           </button>
         </div>
-        {error && <div style={{ fontSize: 12, color: 'var(--red)', background: 'rgba(229,86,75,0.08)', border: '1px solid rgba(229,86,75,0.2)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
-        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { k: 'title', label: 'Title *', placeholder: 'Full paper title', required: true },
-            { k: 'authors', label: 'Authors', placeholder: 'e.g. Smith, J., Doe, A.' },
-            { k: 'doi', label: 'DOI', placeholder: 'e.g. 10.1039/d4bm00021a' },
-          ].map(({ k, label, placeholder, required }) => (
-            <div key={k}>
-              <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
-              <input
-                value={form[k as keyof typeof form]}
-                onChange={set(k)}
-                placeholder={placeholder}
-                required={required}
-                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
-              />
-            </div>
+
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: 3, gap: 3 }}>
+          {(['arxiv', 'garuda', 'manual'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                flex: 1, appearance: 'none', border: 'none', cursor: 'pointer',
+                padding: '8px 10px', borderRadius: 8, fontFamily: 'inherit',
+                fontSize: 12.5, fontWeight: tab === t ? 500 : 400,
+                background: tab === t ? 'var(--surface)' : 'transparent',
+                color: tab === t ? 'var(--text)' : 'var(--text-3)',
+                boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s', whiteSpace: 'nowrap',
+              }}
+            >
+              {t === 'arxiv' ? 'arXiv' : t === 'garuda' ? 'Garuda 🇮🇩' : 'Manual'}
+            </button>
           ))}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            {[
-              { k: 'year', label: 'Year', placeholder: '2024' },
-              { k: 'journal', label: 'Journal', placeholder: 'Journal name' },
-              { k: 'citation_count', label: 'Citations', placeholder: '0' },
-            ].map(({ k, label, placeholder }) => (
-              <div key={k}>
-                <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
+        </div>
+
+        {/* ── arXiv tab ── */}
+        {tab === 'arxiv' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}>
+            <form onSubmit={handleArxivSearch} style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, paddingLeft: 12, gap: 8 }}>
+                <Search size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} strokeWidth={1.5} />
                 <input
-                  value={form[k as keyof typeof form]}
-                  onChange={set(k)}
-                  placeholder={placeholder}
-                  type="number"
-                  min={k === 'year' ? 1900 : 0}
-                  style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Title, keywords, authors, or arXiv ID…"
+                  autoFocus
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 13, color: 'var(--text)', fontFamily: 'inherit', padding: '10px 12px 10px 0' }}
                 />
               </div>
-            ))}
-          </div>
-          <div>
-            <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Abstract</label>
-            <textarea
-              value={form.abstract}
-              onChange={set('abstract')}
-              placeholder="Paste abstract here…"
-              rows={3}
-              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'vertical' }}
-            />
-          </div>
+              <button
+                type="submit"
+                disabled={arxivStatus === 'loading' || !query.trim()}
+                style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, padding: '10px 18px', cursor: 'pointer', opacity: (arxivStatus === 'loading' || !query.trim()) ? 0.6 : 1, whiteSpace: 'nowrap' }}
+              >
+                {arxivStatus === 'loading' ? 'Searching…' : 'Search'}
+              </button>
+            </form>
 
-          {/* PDF Upload */}
-          <div>
-            <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-              PDF File <span style={{ color: 'var(--text-4)', fontWeight: 300 }}>(optional)</span>
-            </label>
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              background: 'var(--bg)', border: `1px dashed ${pdfFile ? 'var(--teal)' : 'var(--line)'}`,
-              borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
-              transition: 'border-color 0.15s',
-            }}>
-              <FileText size={16} style={{ color: pdfFile ? 'var(--teal)' : 'var(--text-4)', flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: pdfFile ? 'var(--text)' : 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {pdfFile ? pdfFile.name : 'Click to attach PDF…'}
-              </span>
-              {pdfFile && (
-                <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setPdfFile(null); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 0, display: 'flex' }}>
-                  <X size={14} />
-                </button>
+            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 200 }}>
+              {arxivStatus === 'idle' && (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-4)', fontSize: 13 }}>
+                  Search arXiv&apos;s 2M+ open-access papers by topic, author, or arXiv ID.
+                </div>
               )}
-              <input type="file" accept="application/pdf" style={{ display: 'none' }}
-                onChange={e => setPdfFile(e.target.files?.[0] ?? null)} />
-            </label>
-            {pdfFile && (
-              <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
-                {(pdfFile.size / 1024 / 1024).toFixed(1)} MB
-              </div>
-            )}
+              {arxivStatus === 'loading' && Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ height: 13, borderRadius: 5, background: 'var(--skeleton-1)', width: `${65 + (i * 11) % 22}%` }} />
+                  <div style={{ height: 10, borderRadius: 4, background: 'var(--skeleton-1)', width: '42%' }} />
+                  <div style={{ height: 10, borderRadius: 4, background: 'var(--skeleton-1)', width: '88%' }} />
+                </div>
+              ))}
+              {arxivStatus === 'error' && (
+                <div style={{ fontSize: 13, color: 'var(--red)', background: 'rgba(229,86,75,0.08)', border: '1px solid rgba(229,86,75,0.2)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+                  Could not reach arXiv. Check your connection and try again.
+                </div>
+              )}
+              {arxivStatus === 'done' && results.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-4)', fontSize: 13 }}>
+                  No results found for &ldquo;{query}&rdquo;.
+                </div>
+              )}
+              {results.map(paper => (
+                <div key={paper.id} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 400, color: 'var(--text)', lineHeight: 1.4, marginBottom: 5, overflow: 'hidden', maxHeight: '2.8em' }}>
+                      {paper.title}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 5, fontFamily: 'var(--font-geist-mono, monospace)', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      <span>{paper.authors.slice(0, 3).join(', ')}{paper.authors.length > 3 ? ` +${paper.authors.length - 3}` : ''}</span>
+                      {paper.year && <><span>·</span><span>{paper.year}</span></>}
+                      {paper.categories[0] && <><span>·</span><span style={{ color: 'var(--teal)', background: 'var(--teal-soft)', padding: '1px 6px', borderRadius: 4 }}>{paper.categories[0]}</span></>}
+                    </div>
+                    {paper.summary && (
+                      <div style={{ fontSize: 12, color: 'var(--text-4)', lineHeight: 1.5, overflow: 'hidden', maxHeight: '3em' }}>
+                        {paper.summary}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleArxivImport(paper)}
+                    disabled={!!importing}
+                    style={{
+                      appearance: 'none', flexShrink: 0,
+                      background: importing === paper.id ? 'var(--teal)' : 'var(--surface)',
+                      border: '1px solid var(--line)', borderRadius: 8,
+                      color: importing === paper.id ? '#0B3B38' : 'var(--text-2)',
+                      fontSize: 12.5, fontFamily: 'inherit', fontWeight: 500,
+                      padding: '7px 12px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      opacity: (importing && importing !== paper.id) ? 0.5 : 1,
+                      transition: 'all 0.15s', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {importing === paper.id ? 'Saving…' : <><Plus size={13} strokeWidth={1.8} /> Import</>}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
+        )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
-            <button type="button" onClick={onClose} style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--text-2)', fontSize: 13, fontFamily: 'inherit', padding: '10px 18px', cursor: 'pointer' }}>
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, padding: '10px 20px', cursor: 'pointer', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {saving ? savingMsg : <><Plus size={14} /> Add to Library</>}
-            </button>
+        {/* ── Garuda tab ── */}
+        {tab === 'garuda' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}>
+            <form onSubmit={handleGarudaSearch} style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, paddingLeft: 12, gap: 8 }}>
+                <Search size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} strokeWidth={1.5} />
+                <input
+                  value={garudaQuery}
+                  onChange={e => setGarudaQuery(e.target.value)}
+                  placeholder="Judul, kata kunci, penulis, atau nama jurnal…"
+                  autoFocus
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 13, color: 'var(--text)', fontFamily: 'inherit', padding: '10px 12px 10px 0' }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={garudaStatus === 'loading' || !garudaQuery.trim()}
+                style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, padding: '10px 18px', cursor: 'pointer', opacity: (garudaStatus === 'loading' || !garudaQuery.trim()) ? 0.6 : 1, whiteSpace: 'nowrap' }}
+              >
+                {garudaStatus === 'loading' ? 'Mencari…' : 'Cari'}
+              </button>
+            </form>
+
+            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 200 }}>
+              {garudaStatus === 'idle' && (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-4)', fontSize: 13 }}>
+                  Cari jurnal ilmiah Indonesia terindeks SINTA dari database Garuda.
+                </div>
+              )}
+              {garudaStatus === 'loading' && Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ height: 13, borderRadius: 5, background: 'var(--skeleton-1)', width: `${65 + (i * 11) % 22}%` }} />
+                  <div style={{ height: 10, borderRadius: 4, background: 'var(--skeleton-1)', width: '42%' }} />
+                  <div style={{ height: 10, borderRadius: 4, background: 'var(--skeleton-1)', width: '88%' }} />
+                </div>
+              ))}
+              {garudaStatus === 'error' && (
+                <div style={{ fontSize: 13, color: 'var(--red)', background: 'rgba(229,86,75,0.08)', border: '1px solid rgba(229,86,75,0.2)', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+                  Gagal mengakses Garuda. Periksa koneksi dan coba lagi.
+                </div>
+              )}
+              {garudaStatus === 'done' && garudaResults.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-4)', fontSize: 13 }}>
+                  Tidak ada hasil untuk &ldquo;{garudaQuery}&rdquo;.
+                </div>
+              )}
+              {garudaResults.map(r => (
+                <div key={r.id} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 400, color: 'var(--text)', lineHeight: 1.4, marginBottom: 5, overflow: 'hidden', maxHeight: '2.8em' }}>
+                      {r.title}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 4, fontFamily: 'var(--font-geist-mono, monospace)', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      <span>{r.authors.slice(0, 3).join(', ')}{r.authors.length > 3 ? ` +${r.authors.length - 3}` : ''}</span>
+                      {r.year && <><span>·</span><span>{r.year}</span></>}
+                      {r.journal && <><span>·</span><span style={{ color: 'var(--teal)', background: 'var(--teal-soft)', padding: '1px 6px', borderRadius: 4, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.journal}</span></>}
+                    </div>
+                    {r.publisher && (
+                      <div style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: 4 }}>{r.publisher}</div>
+                    )}
+                    {r.abstract && (
+                      <div style={{ fontSize: 12, color: 'var(--text-4)', lineHeight: 1.5, overflow: 'hidden', maxHeight: '3em' }}>
+                        {r.abstract}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, alignItems: 'flex-end' }}>
+                    <button
+                      onClick={() => handleGarudaImport(r)}
+                      disabled={!!garudaImporting}
+                      style={{
+                        appearance: 'none',
+                        background: garudaImporting === r.id ? 'var(--teal)' : 'var(--surface)',
+                        border: '1px solid var(--line)', borderRadius: 8,
+                        color: garudaImporting === r.id ? '#0B3B38' : 'var(--text-2)',
+                        fontSize: 12.5, fontFamily: 'inherit', fontWeight: 500,
+                        padding: '7px 12px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        opacity: (garudaImporting && garudaImporting !== r.id) ? 0.5 : 1,
+                        transition: 'all 0.15s', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {garudaImporting === r.id ? 'Saving…' : <><Plus size={13} strokeWidth={1.8} /> Import</>}
+                    </button>
+                    <a
+                      href={r.detailUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: 'var(--text-4)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                    >
+                      Garuda <ArrowUpRight size={10} strokeWidth={1.5} />
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </form>
+        )}
+
+        {/* ── Manual tab ── */}
+        {tab === 'manual' && (
+          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {error && <div style={{ fontSize: 12, color: 'var(--red)', background: 'rgba(229,86,75,0.08)', border: '1px solid rgba(229,86,75,0.2)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
+
+            {/* ── PDF upload + AI extract ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                background: 'var(--bg)', borderRadius: 10, padding: '10px 14px',
+                border: `1px dashed ${pdfFile ? 'var(--teal)' : 'var(--line)'}`,
+                transition: 'border-color 0.15s',
+              }}>
+                <FileText size={15} style={{ color: pdfFile ? 'var(--teal)' : 'var(--text-4)', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13, color: pdfFile ? 'var(--text)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {pdfFile ? pdfFile.name : 'Upload PDF — AI will auto-fill the form below'}
+                </span>
+                {pdfFile && (
+                  <span style={{ fontSize: 11, color: 'var(--text-4)', flexShrink: 0 }}>
+                    {(pdfFile.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                )}
+                {pdfFile && (
+                  <button type="button"
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setPdfFile(null); setExtractErr(''); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 0, display: 'flex' }}>
+                    <X size={13} />
+                  </button>
+                )}
+                <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0] ?? null;
+                    setPdfFile(file);
+                    setExtractErr('');
+                    if (file) extractMetadata(file);
+                  }} />
+              </label>
+
+              {/* Inline extraction status */}
+              {pdfFile && extracting && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--teal)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.06em' }}>
+                  <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(78,205,196,0.25)', borderTopColor: 'var(--teal)', borderRadius: '50%', animation: 'modal-spin 0.7s linear infinite', flexShrink: 0 }} />
+                  Extracting metadata…
+                </div>
+              )}
+              {pdfFile && !extracting && filledFields.size > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--teal)' }}>
+                  <Check size={12} strokeWidth={2.5} /> {filledFields.size} fields auto-filled
+                  <button type="button" onClick={() => extractMetadata()} style={{ marginLeft: 4, appearance: 'none', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 11.5, fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>
+                    Re-extract
+                  </button>
+                </div>
+              )}
+              {extractErr && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--red)' }}>
+                  <AlertCircle size={12} strokeWidth={1.5} /> {extractErr}
+                  <button type="button" onClick={() => extractMetadata()} style={{ marginLeft: 4, appearance: 'none', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 11.5, fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>
+                    Retry
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={submitManual} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { k: 'title', label: 'Title *', placeholder: 'Full paper title', required: true },
+                { k: 'authors', label: 'Authors', placeholder: 'e.g. Smith J, Doe A' },
+                { k: 'doi', label: 'DOI', placeholder: 'e.g. 10.1039/d4bm00021a' },
+              ].map(({ k, label, placeholder, required }) => (
+                <div key={k}>
+                  <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
+                  <input
+                    value={form[k as keyof typeof form]}
+                    onChange={setField(k)}
+                    placeholder={placeholder}
+                    required={required}
+                    style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', border: `1px solid ${filledFields.has(k) ? 'var(--teal)' : 'var(--line)'}`, boxShadow: filledFields.has(k) ? '0 0 0 3px var(--teal-soft)' : 'none', transition: 'border-color 0.4s, box-shadow 0.4s' }}
+                  />
+                </div>
+              ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                {[
+                  { k: 'year', label: 'Year', placeholder: '2024' },
+                  { k: 'journal', label: 'Journal', placeholder: 'Journal name' },
+                  { k: 'citation_count', label: 'Citations', placeholder: '0' },
+                ].map(({ k, label, placeholder }) => (
+                  <div key={k}>
+                    <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>{label}</label>
+                    <input
+                      value={form[k as keyof typeof form]}
+                      onChange={setField(k)}
+                      placeholder={placeholder}
+                      type="number"
+                      min={k === 'year' ? 1900 : 0}
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', border: `1px solid ${filledFields.has(k) ? 'var(--teal)' : 'var(--line)'}`, boxShadow: filledFields.has(k) ? '0 0 0 3px var(--teal-soft)' : 'none', transition: 'border-color 0.4s, box-shadow 0.4s' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Abstract</label>
+                <textarea
+                  value={form.abstract}
+                  onChange={setField('abstract')}
+                  placeholder="Paste abstract here…"
+                  rows={3}
+                  style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', borderRadius: 10, padding: '10px 12px', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', resize: 'vertical', border: `1px solid ${filledFields.has('abstract') ? 'var(--teal)' : 'var(--line)'}`, boxShadow: filledFields.has('abstract') ? '0 0 0 3px var(--teal-soft)' : 'none', transition: 'border-color 0.4s, box-shadow 0.4s' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+                <button type="button" onClick={onClose} style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, color: 'var(--text-2)', fontSize: 13, fontFamily: 'inherit', padding: '10px 18px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving} style={{ appearance: 'none', background: 'var(--teal)', border: 'none', borderRadius: 10, color: '#0B3B38', fontSize: 13, fontFamily: 'inherit', fontWeight: 500, padding: '10px 20px', cursor: 'pointer', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {saving ? savingMsg : <><Plus size={14} /> Add to Library</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -632,17 +1048,30 @@ export default function LibraryPage() {
                   {activePaper ? activePaper.title.slice(0, 60) + (activePaper.title.length > 60 ? '…' : '') : 'No paper selected'}
                 </span>
               </div>
-              <span className="pdf-pg-num">Page 1 of 14</span>
-              <span className="pdf-divider" />
-              <button className="tbtn" title="Previous page"><ChevronUp size={14} strokeWidth={1.5} /></button>
-              <button className="tbtn" title="Next page"><ChevronDown size={14} strokeWidth={1.5} /></button>
-              <span className="pdf-divider" />
-              <button className="tbtn" title="Zoom out"><Minus size={14} strokeWidth={1.5} /></button>
-              <span className="pdf-zoom">100%</span>
-              <button className="tbtn" title="Zoom in"><Plus size={14} strokeWidth={1.5} /></button>
-              <span className="pdf-divider" />
-              <button className="tbtn" title="Outline"><List size={14} strokeWidth={1.5} /></button>
-              <button className="tbtn" title="Download"><Download size={14} strokeWidth={1.5} /></button>
+              {activePaper?.pdf_url ? (
+                <>
+                  <span className="pdf-pg-num">Page 1 of —</span>
+                  <span className="pdf-divider" />
+                  <button className="tbtn" title="Previous page"><ChevronUp size={14} strokeWidth={1.5} /></button>
+                  <button className="tbtn" title="Next page"><ChevronDown size={14} strokeWidth={1.5} /></button>
+                  <span className="pdf-divider" />
+                  <button className="tbtn" title="Zoom out"><Minus size={14} strokeWidth={1.5} /></button>
+                  <span className="pdf-zoom">100%</span>
+                  <button className="tbtn" title="Zoom in"><Plus size={14} strokeWidth={1.5} /></button>
+                  <span className="pdf-divider" />
+                  <button className="tbtn" title="Outline"><List size={14} strokeWidth={1.5} /></button>
+                  <button className="tbtn" title="Download"><Download size={14} strokeWidth={1.5} /></button>
+                </>
+              ) : (
+                <label className="tbtn pdf-upload-btn" title="Upload PDF" style={{ marginLeft: 'auto', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, width: 'auto', padding: '0 10px', fontSize: 12, color: 'var(--text-3)' }}>
+                  <Upload size={13} strokeWidth={1.5} /> Upload PDF
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (file && activeId) { await uploadPdf(activeId, file); showToast('PDF uploaded'); }
+                    }} />
+                </label>
+              )}
             </div>
 
             {/* PDF scroll area */}
@@ -655,39 +1084,70 @@ export default function LibraryPage() {
                   title={activePaper.title}
                 />
               ) : activePaper ? (
-                /* Metadata view when no PDF uploaded */
-                <article className="page">
-                  <div className="pg-header">
-                    <span>{activePaper.journal ?? 'Unknown Journal'}{activePaper.year ? ` · ${activePaper.year}` : ''}</span>
-                    <span>{activePaper.authors?.split(',')[0] ?? ''}{activePaper.year ? ` · ${activePaper.year}` : ''}</span>
+                /* Metadata view — clean card */
+                <div className="pmv">
+                  {/* Badges */}
+                  <div className="pmv-badges">
+                    {activePaper.journal && (
+                      <span className={`pmv-chip${activePaper.doi?.startsWith('arxiv:') ? ' pmv-chip-teal' : ''}`}>
+                        {activePaper.journal}
+                      </span>
+                    )}
+                    {activePaper.year && <span className="pmv-chip">{activePaper.year}</span>}
+                    {activePaper.citation_count != null && activePaper.citation_count > 0 && (
+                      <span className="pmv-chip">
+                        <Quote size={10} strokeWidth={1.5} /> {activePaper.citation_count.toLocaleString()} cited
+                      </span>
+                    )}
+                    {activePaper.doi?.startsWith('arxiv:') && (
+                      <a href={`https://arxiv.org/abs/${activePaper.doi.slice(6)}`} target="_blank" rel="noopener noreferrer" className="pmv-ext-link">
+                        Open arXiv <ArrowUpRight size={11} strokeWidth={1.5} />
+                      </a>
+                    )}
                   </div>
 
-                  <h2 className="paper-title">{activePaper.title}</h2>
-                  {activePaper.authors && <div className="paper-authors">{activePaper.authors}</div>}
-                  {activePaper.doi && <div className="paper-affil">doi: {activePaper.doi}</div>}
+                  {/* Title */}
+                  <h2 className="pmv-title">{activePaper.title}</h2>
 
+                  {/* Authors */}
+                  {activePaper.authors && (
+                    <div className="pmv-authors">{activePaper.authors}</div>
+                  )}
+
+                  {/* Identifier */}
+                  {activePaper.doi && (
+                    <div className="pmv-id">
+                      <span className="pmv-id-lbl">{activePaper.doi.startsWith('arxiv:') ? 'arXiv' : 'doi'}</span>
+                      {activePaper.doi.startsWith('arxiv:') ? activePaper.doi.slice(6) : activePaper.doi}
+                    </div>
+                  )}
+
+                  <div className="pmv-rule" />
+
+                  {/* Abstract */}
                   {activePaper.abstract ? (
                     <>
-                      <div className="abstract-label">Abstract</div>
-                      <p className="abstract">{activePaper.abstract}</p>
+                      <div className="pmv-abstract-lbl">Abstract</div>
+                      <p className="pmv-abstract">{activePaper.abstract}</p>
                     </>
                   ) : (
-                    <div style={{ marginTop: 32, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>
-                      <FileText size={32} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.3 }} strokeWidth={1} />
-                      No PDF or abstract available.<br />
-                      <span style={{ fontSize: 11, fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 8, display: 'block' }}>
-                        Upload a PDF to enable full-text reading and annotation.
-                      </span>
+                    <div className="pmv-empty">
+                      <FileText size={26} strokeWidth={0.8} />
+                      <span>No abstract available</span>
                     </div>
                   )}
 
-                  {activePaper.doi && (
-                    <div className="pg-footer">
-                      <span>doi:{activePaper.doi}</span>
-                      {activePaper.year && <span>© {activePaper.year}</span>}
-                    </div>
-                  )}
-                </article>
+                  {/* Upload CTA */}
+                  <label className="pmv-upload">
+                    <Upload size={13} strokeWidth={1.5} />
+                    Upload PDF to read full text
+                    <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                      onChange={async e => {
+                        const file = e.target.files?.[0];
+                        if (file && activeId) { await uploadPdf(activeId, file); showToast('PDF uploaded'); }
+                      }} />
+                  </label>
+                </div>
               ) : (
                 /* No paper selected */
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 12, color: 'var(--text-4)' }}>
@@ -1559,6 +2019,92 @@ mark.hl:hover { background: rgba(78,205,196,0.45); }
 .anno-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--line); }
 .anno-btn.primary { background: var(--teal); color: #0B3B38; border-color: var(--teal); }
 .anno-btn.primary:hover { background: var(--teal-deep); }
+
+/* Paper Metadata View */
+.pmv {
+  width: 100%; height: 100%;
+  overflow: auto;
+  padding: 36px 40px 56px;
+  display: flex; flex-direction: column;
+}
+.pmv-badges {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.pmv-chip {
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.pmv-chip-teal {
+  color: var(--teal); background: var(--teal-soft);
+  border-color: rgba(78,205,196,0.3);
+}
+.pmv-ext-link {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--teal); text-decoration: none;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid rgba(78,205,196,0.3);
+  background: var(--teal-soft);
+  transition: background 0.15s;
+}
+.pmv-ext-link:hover { background: rgba(78,205,196,0.18); }
+.pmv-title {
+  font-size: 20px; font-weight: 300; line-height: 1.35;
+  letter-spacing: -0.02em; color: var(--text);
+  margin-bottom: 12px;
+}
+.pmv-authors {
+  font-size: 13px; color: var(--text-3);
+  font-style: italic; margin-bottom: 10px; line-height: 1.6;
+}
+.pmv-id {
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 11px; letter-spacing: 0.06em;
+  color: var(--text-4); margin-bottom: 24px;
+  display: flex; align-items: center; gap: 6px;
+}
+.pmv-id-lbl {
+  font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 5px; color: var(--text-4);
+}
+.pmv-rule {
+  height: 1px; background: var(--line); margin-bottom: 20px;
+}
+.pmv-abstract-lbl {
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 9.5px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--text-4); margin-bottom: 10px;
+}
+.pmv-abstract {
+  font-size: 13.5px; line-height: 1.75; color: var(--text-2);
+  font-weight: 300; margin-bottom: 32px;
+  max-width: 66ch;
+}
+.pmv-empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 28px 0; color: var(--text-4);
+  font-size: 13px; margin-bottom: 28px;
+}
+.pmv-upload {
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; align-self: flex-start;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text-3);
+  font-size: 12.5px; font-family: inherit;
+  padding: 9px 14px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.pmv-upload:hover { background: var(--surface-2); border-color: var(--text-4); color: var(--text); }
+
+@keyframes modal-spin { to { transform: rotate(360deg); } }
 
 /* Responsive */
 @media (max-width: 1180px) {

@@ -1,128 +1,70 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Languages, ArrowRight, Copy, Download, Upload,
-  Sparkles, ChevronDown, Check, AlertTriangle, Crown,
+  ArrowLeftRight, Copy, Download, Sparkles,
+  ChevronDown, Check, AlertCircle, X, FileText,
 } from 'lucide-react';
 
-// ─────────────────────── Data ───────────────────────
+const LANGUAGES = [
+  { code: 'English',               native: 'English' },
+  { code: 'Bahasa Indonesia',      native: 'Bahasa Indonesia' },
+  { code: 'Chinese (Simplified)',  native: '中文 (简体)' },
+  { code: 'Chinese (Traditional)', native: '中文 (繁體)' },
+  { code: 'Japanese',              native: '日本語' },
+  { code: 'Korean',                native: '한국어' },
+  { code: 'Arabic',                native: 'العربية' },
+  { code: 'French',                native: 'Français' },
+  { code: 'German',                native: 'Deutsch' },
+  { code: 'Spanish',               native: 'Español' },
+  { code: 'Portuguese',            native: 'Português' },
+  { code: 'Russian',               native: 'Русский' },
+  { code: 'Dutch',                 native: 'Nederlands' },
+  { code: 'Italian',               native: 'Italiano' },
+  { code: 'Turkish',               native: 'Türkçe' },
+  { code: 'Hindi',                 native: 'हिन्दी' },
+  { code: 'Malay',                 native: 'Bahasa Melayu' },
+];
 
-const SRC_LANGS = ['Auto-detect', 'English', 'Mandarin', 'Japanese', 'German', 'French'];
-const TGT_LANGS = ['Indonesian', 'English', 'Mandarin', 'Japanese', 'German', 'French'];
+const RTL = new Set(['Arabic', 'Hebrew', 'Persian', 'Urdu']);
+const MAX_WORDS = 5000;
 
-const LANG_FLAGS: Record<string, string> = {
-  'Auto-detect': '🌐',
-  English:       '🇬🇧',
-  Mandarin:      '🇨🇳',
-  Japanese:      '🇯🇵',
-  German:        '🇩🇪',
-  French:        '🇫🇷',
-  Indonesian:    '🇮🇩',
-};
-
-const PLACEHOLDER_SOURCE =
-`Electrospinning has emerged as a versatile and scalable technique for the fabrication of nanofibrous scaffolds with diameters ranging from tens to several hundred nanometers. Polycaprolactone (PCL) and polyvinylpyrrolidone (PVP) composite fibers demonstrate exceptional biocompatibility and tunable mechanical properties, making them highly suitable for applications in tissue engineering and controlled drug delivery. Surface functionalization strategies, including UV crosslinking at 365 nm and chemical conjugation of targeting ligands, further expand the functional repertoire of electrospun membranes.
-
-In the present study, we investigated the synergistic effects of PCL:PVP weight ratios (70:30, 60:40, and 50:50) on fiber morphology, hydrophilicity, and in vitro drug release kinetics of paclitaxel-loaded scaffolds. Scanning electron microscopy revealed uniform fiber diameters of 312 ± 42 nm for the 70:30 formulation. Water contact angle measurements demonstrated progressive hydrophilization from 132° (pure PCL) to 84° (70:30 blend), consistent with prior literature. Sustained paclitaxel release over 21 days was observed, following a biphasic profile characteristic of diffusion-mediated transport from polymeric matrices.`;
-
-const PLACEHOLDER_TRANSLATION =
-`Elektrospinning telah berkembang sebagai teknik serbaguna dan dapat diskalakan untuk fabrikasi perancah berserat nano dengan diameter berkisar dari puluhan hingga beberapa ratus nanometer. Serat komposit polikaprolakton (PCL) dan polivinilpirolidon (PVP) menunjukkan biokompatibilitas yang luar biasa dan sifat mekanik yang dapat disesuaikan, menjadikannya sangat cocok untuk aplikasi dalam rekayasa jaringan dan pengiriman obat terkontrol. Strategi fungsionalisasi permukaan, termasuk penaut-silang UV pada 365 nm dan konjugasi kimia ligan penargetan, semakin memperluas repertoar fungsional membran elektrospun.
-
-Dalam penelitian ini, kami menyelidiki efek sinergis rasio berat PCL:PVP (70:30, 60:40, dan 50:50) terhadap morfologi serat, hidrofilisitas, dan kinetika pelepasan obat paklitaksel secara in vitro dari perancah yang dimuat. Mikroskopi elektron pemindaian mengungkapkan diameter serat seragam sebesar 312 ± 42 nm untuk formulasi 70:30. Pengukuran sudut kontak air menunjukkan hidrofilisasi progresif dari 132° (PCL murni) menjadi 84° (campuran 70:30), konsisten dengan literatur sebelumnya. Pelepasan paklitaksel berkelanjutan selama 21 hari diamati, mengikuti profil bifasik yang merupakan ciri transpor yang dimediasi difusi dari matriks polimerik.`;
-
-const INITIAL_CREDITS = 4500;
-
-// ─────────────────────── Skeleton ───────────────────────
-
-function SkeletonLines() {
-  const rows = [1, 0.92, 0.97, 0.74, 0.88, 0.62, 1, 0.90, 0.95, 0.68];
-  return (
-    <div style={{ padding: '18px 18px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
-      {rows.map((w, i) => (
-        <div
-          key={i}
-          className="skeleton"
-          style={{ height: '14px', borderRadius: '5px', width: `${w * 100}%`, opacity: 0.7 - i * 0.025 }}
-        />
-      ))}
-      <div style={{ height: '14px' }} />
-      {[0.94, 0.86, 0.97, 0.72, 0.80].map((w, i) => (
-        <div
-          key={`b${i}`}
-          className="skeleton"
-          style={{ height: '14px', borderRadius: '5px', width: `${w * 100}%`, opacity: 0.65 - i * 0.025 }}
-        />
-      ))}
-    </div>
-  );
+function countWords(t: string) {
+  return t.trim() ? t.trim().split(/\s+/).length : 0;
 }
 
-// ─────────────────────── Language dropdown ───────────────────────
-
-function LangSelect({ value, options, onChange }: {
-  value: string; options: string[]; onChange: (v: string) => void;
+/* ─── Language dropdown ─────────────────────────────────── */
+function LangSelect({ value, onChange, exclude }: {
+  value: string; onChange: (v: string) => void; exclude?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const opts = LANGUAGES.filter(l => l.code !== exclude);
+  const cur = LANGUAGES.find(l => l.code === value);
 
   useEffect(() => {
-    const h = (e: MouseEvent) => {
+    const fn = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
   }, []);
 
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          height: '38px', padding: '0 12px',
-          background: 'var(--surface)', border: '1px solid var(--line)',
-          borderRadius: '10px', color: 'var(--text)', fontSize: '13.5px',
-          cursor: 'pointer', transition: 'border-color 0.15s',
-          minWidth: '152px',
-        }}
-        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)'; }}
-        onMouseLeave={e => { if (!open) (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)'; }}
-      >
-        <span style={{ fontSize: '15px' }}>{LANG_FLAGS[value] ?? '🌐'}</span>
-        <span style={{ flex: 1, textAlign: 'left', fontWeight: 400 }}>{value}</span>
-        <ChevronDown
-          size={14}
-          style={{ color: 'var(--text-4)', transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'none' }}
-        />
+    <div ref={ref} className="ls-wrap">
+      <button className="ls-btn" onClick={() => setOpen(v => !v)}>
+        <span className="ls-cur">{cur?.native ?? value}</span>
+        <ChevronDown size={13} strokeWidth={1.5}
+          style={{ color: 'var(--text-4)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
       </button>
-
       {open && (
-        <div style={{
-          position: 'absolute', top: '42px', left: 0, zIndex: 40,
-          background: 'var(--surface)', border: '1px solid var(--line)',
-          borderRadius: '12px', padding: '5px',
-          minWidth: '180px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.28)',
-        }}>
-          {options.map(opt => (
-            <button
-              key={opt}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                width: '100%', padding: '8px 10px', border: 'none',
-                background: value === opt ? 'var(--teal-soft)' : 'transparent',
-                color: value === opt ? 'var(--teal)' : 'var(--text)',
-                fontSize: '13px', cursor: 'pointer', borderRadius: '8px', textAlign: 'left',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { if (value !== opt) { (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'; } }}
-              onMouseLeave={e => { if (value !== opt) { (e.currentTarget as HTMLElement).style.background = 'transparent'; } }}
-            >
-              <span style={{ fontSize: '15px', flexShrink: 0 }}>{LANG_FLAGS[opt] ?? '🌐'}</span>
-              <span style={{ flex: 1 }}>{opt}</span>
-              {value === opt && <Check size={13} style={{ color: 'var(--teal)', flexShrink: 0 }} />}
+        <div className="ls-dropdown">
+          {opts.map(l => (
+            <button key={l.code} className={`ls-opt${l.code === value ? ' active' : ''}`}
+              onClick={() => { onChange(l.code); setOpen(false); }}>
+              <span className="ls-native">{l.native}</span>
+              <span className="ls-en">{l.code !== l.native ? l.code : ''}</span>
+              {l.code === value && <Check size={12} strokeWidth={2} style={{ color: 'var(--teal)', flexShrink: 0 }} />}
             </button>
           ))}
         </div>
@@ -131,302 +73,389 @@ function LangSelect({ value, options, onChange }: {
   );
 }
 
-// ─────────────────────── Page ───────────────────────
-
+/* ─── Page ──────────────────────────────────────────────── */
 export default function TranslationPage() {
-  const [srcLang, setSrcLang]           = useState('Auto-detect');
-  const [tgtLang, setTgtLang]           = useState('Indonesian');
-  const [sourceText, setSourceText]     = useState(PLACEHOLDER_SOURCE);
-  const [translated, setTranslated]     = useState(PLACEHOLDER_TRANSLATION);
-  const [isTranslating, setTranslating] = useState(false);
-  const [credits, setCredits]           = useState(INITIAL_CREDITS);
-  const [copied, setCopied]             = useState(false);
+  const [sourceLang, setSourceLang] = useState('English');
+  const [targetLang, setTargetLang] = useState('Bahasa Indonesia');
+  const [sourceText, setSourceText] = useState('');
+  const [translated, setTranslated]   = useState('');
+  const [translatedWC, setTranslatedWC] = useState(0);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [errMsg, setErrMsg] = useState('');
+  const [copied, setCopied] = useState(false);
 
-  const wordCount      = sourceText.trim() ? sourceText.trim().split(/\s+/).length : 0;
-  const transWordCount = translated.trim() ? translated.trim().split(/\s+/).length : 0;
-  const creditsLow     = credits > 0 && credits < 500;
-  const creditsEmpty   = credits === 0;
+  const srcWC   = countWords(sourceText);
+  const overLimit = srcWC > MAX_WORDS;
+  const canGo   = sourceText.trim().length > 0 && !overLimit && status !== 'loading';
 
-  const handleTranslate = async () => {
-    if (creditsEmpty || isTranslating || !sourceText.trim()) return;
-    setTranslating(true);
-    const wordsUsed = wordCount;
+  function swap() {
+    const pl = sourceLang, tl = targetLang, pt = sourceText, tt = translated;
+    setSourceLang(tl); setTargetLang(pl);
+    if (tt) { setSourceText(tt); setTranslated(pt); }
+  }
+
+  const go = useCallback(async () => {
+    if (!canGo) return;
+    setStatus('loading'); setTranslated(''); setErrMsg('');
     try {
       const res = await fetch('/api/ai/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: sourceText, from: srcLang, to: tgtLang }),
+        body: JSON.stringify({ text: sourceText, sourceLang, targetLang }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setTranslated(data.translation ?? PLACEHOLDER_TRANSLATION);
-      } else {
-        setTranslated(PLACEHOLDER_TRANSLATION);
-      }
-      setCredits(c => Math.max(0, c - wordsUsed));
-    } catch {
-      setTranslated(PLACEHOLDER_TRANSLATION);
-      setCredits(c => Math.max(0, c - wordsUsed));
-    } finally {
-      setTranslating(false);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Translation failed');
+      setTranslated(data.translated);
+      setTranslatedWC(data.translatedWordCount ?? countWords(data.translated));
+      setStatus('done');
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : 'Translation failed');
+      setStatus('error');
     }
-  };
+  }, [canGo, sourceText, sourceLang, targetLang]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(translated).catch(() => null);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') go(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [go]);
+
+  function copyText() {
+    if (!translated) return;
+    navigator.clipboard.writeText(translated);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2200);
-  };
+    setTimeout(() => setCopied(false), 1800);
+  }
 
-  const creditsColor = creditsEmpty ? 'var(--red)' : creditsLow ? '#F59E0B' : 'var(--text-2)';
-  const creditsBorder = creditsEmpty ? 'rgba(229,86,75,0.3)' : creditsLow ? 'rgba(245,158,11,0.3)' : 'var(--line)';
+  function downloadTxt() {
+    if (!translated) return;
+    const blob = new Blob([translated], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `translation-${targetLang.toLowerCase().replace(/\s+/g, '-')}.txt`;
+    a.click();
+  }
+
+  const isRTL = RTL.has(targetLang);
+  const pct   = Math.min((srcWC / MAX_WORDS) * 100, 100);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <div className="tl-root">
 
-      {/* ── Header ── */}
-      <div style={{ padding: '14px 22px 0', flexShrink: 0 }}>
-        {/* Breadcrumb */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10.5px', color: 'var(--text-4)', fontFamily: 'var(--font-geist-mono)', letterSpacing: '0.07em', marginBottom: '10px', textTransform: 'uppercase' }}>
-          <span>Moku</span>
-          <span>›</span>
-          <span style={{ color: 'var(--text-2)' }}>Translation Engine</span>
-        </div>
-
-        {/* Title + Credits row */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+        {/* ── Header ── */}
+        <div className="tl-hd">
           <div>
-            <h1 style={{ fontSize: '21px', fontWeight: 300, color: 'var(--text)', letterSpacing: '-0.022em', margin: 0, lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Languages size={20} style={{ color: 'var(--teal)' }} />
-              Native AI <em style={{ color: 'var(--teal)', fontStyle: 'italic' }}>Translation</em>
-            </h1>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }}>
-              Scientific terminology-aware · paragraph structure preserved · domain-calibrated
-            </div>
+            <div className="tl-eyebrow"><span className="tl-dot" /> Translation Engine</div>
+            <h1 className="tl-title">Translate <em>anything</em> precisely.</h1>
           </div>
-
-          {/* Credits counter */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
-            padding: '8px 14px',
-            background: 'var(--surface)', border: `1px solid ${creditsBorder}`,
-            borderRadius: '11px', transition: 'border-color 0.3s',
-          }}>
-            {(creditsLow || creditsEmpty) && (
-              <AlertTriangle size={13} style={{ color: creditsColor, flexShrink: 0 }} />
-            )}
-            <span style={{ fontSize: '12.5px', fontFamily: 'var(--font-geist-mono)', color: creditsColor, whiteSpace: 'nowrap' }}>
-              {creditsEmpty ? 'No credits left' : `${credits.toLocaleString()} words remaining`}
-            </span>
-            <span style={{ width: '1px', height: '14px', background: 'var(--line)', display: 'inline-block' }} />
-            <button style={{ background: 'none', border: 'none', color: 'var(--teal)', fontSize: '12.5px', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 500, transition: 'opacity 0.15s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.75'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-            >
-              <Crown size={12} /> Upgrade
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Credits warning banners ── */}
-      {creditsLow && (
-        <div style={{ margin: '0 22px 10px', padding: '10px 14px', background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.28)', borderRadius: '10px', fontSize: '12.5px', color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <AlertTriangle size={13} />
-          Running low on credits.{' '}
-          <button style={{ background: 'none', border: 'none', color: '#F59E0B', fontSize: '12.5px', cursor: 'pointer', padding: 0, fontWeight: 600, textDecoration: 'underline' }}>
-            Upgrade for unlimited translation.
+          <button className={`tl-go${canGo ? '' : ' off'}`} onClick={go} disabled={!canGo}>
+            {status === 'loading'
+              ? <><span className="tl-spin" /> Translating…</>
+              : <><Sparkles size={14} strokeWidth={1.5} /> Translate</>}
           </button>
         </div>
-      )}
-      {creditsEmpty && (
-        <div style={{ margin: '0 22px 10px', padding: '14px 18px', background: 'rgba(229,86,75,0.07)', border: '1px solid rgba(229,86,75,0.28)', borderRadius: '12px', flexShrink: 0 }}>
-          <div style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--red)', marginBottom: '4px' }}>
-            You&apos;ve used all your translation credits.
-          </div>
-          <div style={{ fontSize: '12.5px', color: 'var(--text-3)', lineHeight: 1.5 }}>
-            Upgrade to <strong style={{ color: 'var(--text)' }}>Moku Pro</strong> to continue translating scientific documents without limits.
-          </div>
-        </div>
-      )}
 
-      {/* ── Language selector bar ── */}
-      <div style={{ padding: '0 22px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <LangSelect value={srcLang} options={SRC_LANGS} onChange={setSrcLang} />
-
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-          <ArrowRight size={16} style={{ color: 'var(--text-4)' }} />
+        {/* ── Lang bar ── */}
+        <div className="tl-lang-bar">
+          <LangSelect value={sourceLang} onChange={setSourceLang} exclude={targetLang} />
+          <button className="tl-swap" onClick={swap} title="Swap languages">
+            <ArrowLeftRight size={14} strokeWidth={1.5} />
+          </button>
+          <LangSelect value={targetLang} onChange={setTargetLang} exclude={sourceLang} />
+          <div className="tl-hint"><kbd>⌘</kbd><kbd>↵</kbd></div>
         </div>
 
-        <LangSelect value={tgtLang} options={TGT_LANGS} onChange={setTgtLang} />
+        {/* ── Panes ── */}
+        <div className="tl-panes">
 
-        <button
-          onClick={handleTranslate}
-          disabled={creditsEmpty || isTranslating || !sourceText.trim()}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '7px',
-            height: '38px', padding: '0 20px',
-            background: creditsEmpty ? 'var(--surface-3)' : 'var(--teal)',
-            border: 'none', borderRadius: '10px',
-            color: creditsEmpty ? 'var(--text-4)' : '#0B3B38',
-            fontSize: '13.5px', fontWeight: 600,
-            cursor: (creditsEmpty || isTranslating) ? 'not-allowed' : 'pointer',
-            opacity: (creditsEmpty || isTranslating) ? 0.65 : 1,
-            transition: 'opacity 0.15s, transform 0.15s',
-          }}
-          onMouseEnter={e => { if (!creditsEmpty && !isTranslating) { (e.currentTarget as HTMLElement).style.opacity = '0.86'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; } }}
-          onMouseLeave={e => { if (!creditsEmpty && !isTranslating) { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; } }}
-        >
-          <Sparkles size={14} style={{ animation: isTranslating ? 'spin 1.4s linear infinite' : 'none' }} />
-          {isTranslating ? 'Translating…' : 'Translate'}
-        </button>
-      </div>
-
-      {/* ── Split view ── */}
-      <div
-        className="translation-grid"
-        style={{
-          flex: 1, minHeight: 0,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '12px',
-          padding: '0 22px 22px',
-        }}
-      >
-        {/* ── Source panel ── */}
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--line)',
-          borderRadius: '16px', display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', minHeight: 0,
-        }}>
-          {/* Panel header */}
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              Original Document
-            </span>
-          </div>
-
-          {/* Textarea */}
-          <textarea
-            value={sourceText}
-            onChange={e => setSourceText(e.target.value)}
-            placeholder="Paste scientific text or upload PDF…"
-            style={{
-              flex: 1, width: '100%', boxSizing: 'border-box',
-              background: 'transparent', border: 'none', outline: 'none',
-              resize: 'none', padding: '16px 18px',
-              color: 'var(--text)', fontSize: '13.5px',
-              lineHeight: 1.75, fontFamily: 'inherit',
-            }}
-          />
-
-          {/* Footer */}
-          <div style={{ padding: '9px 14px', borderTop: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: '8px' }}>
-            <button
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                padding: '5px 10px', borderRadius: '8px',
-                background: 'transparent', border: '1px solid var(--line)',
-                color: 'var(--text-3)', fontSize: '12px', cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'; }}
-            >
-              <Upload size={12} /> Upload PDF
-            </button>
-            <span style={{ fontSize: '11px', color: 'var(--text-4)', fontFamily: 'var(--font-geist-mono)' }}>
-              {wordCount.toLocaleString()} words
-            </span>
-          </div>
-        </div>
-
-        {/* ── Translation panel ── */}
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--line)',
-          borderRadius: '16px', display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', minHeight: 0,
-        }}>
-          {/* Panel header */}
-          <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-3)', fontFamily: 'var(--font-geist-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              Translation
-              <span style={{ fontSize: '14px' }}>{LANG_FLAGS[tgtLang] ?? ''}</span>
-            </span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {/* Copy */}
-              <button
-                onClick={handleCopy}
-                disabled={!translated.trim()}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
-                  padding: '4px 10px', borderRadius: '7px',
-                  background: copied ? 'var(--teal-soft)' : 'transparent',
-                  border: `1px solid ${copied ? 'rgba(78,205,196,0.4)' : 'var(--line)'}`,
-                  color: copied ? 'var(--teal)' : 'var(--text-3)',
-                  fontSize: '11.5px', cursor: 'pointer', transition: 'all 0.15s',
-                  opacity: !translated.trim() ? 0.5 : 1,
-                }}
-                onMouseEnter={e => { if (!copied && translated.trim()) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; } }}
-                onMouseLeave={e => { if (!copied) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'; } }}
-              >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-              {/* Download */}
-              <button
-                disabled={!translated.trim()}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
-                  padding: '4px 10px', borderRadius: '7px',
-                  background: 'transparent', border: '1px solid var(--line)',
-                  color: 'var(--text-3)', fontSize: '11.5px', cursor: 'pointer',
-                  transition: 'all 0.15s', opacity: !translated.trim() ? 0.5 : 1,
-                }}
-                onMouseEnter={e => { if (translated.trim()) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--teal)'; (e.currentTarget as HTMLElement).style.color = 'var(--teal)'; } }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--line)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-3)'; }}
-              >
-                <Download size={12} /> .docx
-              </button>
+          {/* Source */}
+          <div className="tl-pane">
+            <div className="tl-pane-bar">
+              <span className="tl-lbl">Source · {sourceLang}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {sourceText && (
+                  <button className="tl-icon" onClick={() => { setSourceText(''); setTranslated(''); setStatus('idle'); }} title="Clear">
+                    <X size={12} strokeWidth={1.5} />
+                  </button>
+                )}
+                <span className={`tl-wc${overLimit ? ' red' : srcWC > MAX_WORDS * 0.85 ? ' amber' : ''}`}>
+                  {srcWC.toLocaleString()}<span className="tl-wc-of"> / {MAX_WORDS.toLocaleString()}</span>
+                </span>
+              </div>
             </div>
+            {/* Progress bar */}
+            <div className="tl-prog-wrap">
+              <div className={`tl-prog${overLimit ? ' red' : ''}`} style={{ width: pct + '%' }} />
+            </div>
+            <textarea
+              className="tl-ta"
+              placeholder={"Paste your abstract, methods section, or any academic text here…\n\nCitations [1], units (nm, kDa, °C), and formatting are preserved exactly."}
+              value={sourceText}
+              onChange={e => setSourceText(e.target.value)}
+              spellCheck={false}
+            />
+            {overLimit && (
+              <div className="tl-warn">
+                <AlertCircle size={12} strokeWidth={1.5} />
+                {(srcWC - MAX_WORDS).toLocaleString()} words over limit
+              </div>
+            )}
           </div>
 
-          {/* Content — skeleton or translation */}
-          {isTranslating ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <SkeletonLines />
+          <div className="tl-vdiv" />
+
+          {/* Output */}
+          <div className="tl-pane">
+            <div className="tl-pane-bar">
+              <span className="tl-lbl">Translation · {targetLang}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {status === 'done' && <span className="tl-wc">{translatedWC.toLocaleString()} words</span>}
+                <button className={`tl-action${copied ? ' active' : ''}`} onClick={copyText} disabled={!translated}>
+                  {copied ? <Check size={12} strokeWidth={2.5} /> : <Copy size={12} strokeWidth={1.5} />}
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button className="tl-action" onClick={downloadTxt} disabled={!translated}>
+                  <Download size={12} strokeWidth={1.5} /> .txt
+                </button>
+              </div>
             </div>
-          ) : (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
-              {translated ? (
-                <p style={{ color: 'var(--text)', fontSize: '13.5px', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {translated}
-                </p>
-              ) : (
-                <p style={{ color: 'var(--text-4)', fontSize: '13px', fontStyle: 'italic', margin: 0 }}>
-                  Translation will appear here after you click Translate.
-                </p>
+            <div className="tl-prog-wrap" />
+
+            <div className="tl-out" dir={isRTL ? 'rtl' : 'ltr'}>
+              {status === 'idle' && (
+                <div className="tl-empty">
+                  <FileText size={28} strokeWidth={0.8} style={{ opacity: 0.18 }} />
+                  <span>Translation will appear here.</span>
+                  <span className="tl-empty-sub">
+                    Academic terminology · citations · structure — all preserved.
+                    <br />Up to {MAX_WORDS.toLocaleString()} words per request.
+                  </span>
+                </div>
               )}
+              {status === 'loading' && (
+                <div className="tl-skels">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <div key={i} className="tl-sk" style={{ width: `${52 + (i * 19) % 40}%` }} />
+                  ))}
+                </div>
+              )}
+              {status === 'error' && (
+                <div className="tl-err">
+                  <AlertCircle size={15} strokeWidth={1.5} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Translation failed</div>
+                    <div style={{ fontSize: 12, marginTop: 3, opacity: 0.75 }}>{errMsg}</div>
+                  </div>
+                </div>
+              )}
+              {status === 'done' && <p className="tl-result">{translated}</p>}
             </div>
-          )}
-
-          {/* Footer */}
-          <div style={{ padding: '9px 14px', borderTop: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-4)', fontFamily: 'var(--font-geist-mono)' }}>
-              {transWordCount.toLocaleString()} words
-            </span>
           </div>
         </div>
       </div>
-
-      {/* ── Mobile responsive styles ── */}
-      <style>{`
-        @media (max-width: 768px) {
-          .translation-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
-    </div>
+    </>
   );
 }
+
+/* ─── CSS ────────────────────────────────────────────────── */
+const CSS = `
+.tl-root {
+  display: flex; flex-direction: column;
+  height: 100%; padding: 22px 28px 20px; gap: 14px;
+  overflow: hidden; min-height: 0; background: var(--bg);
+}
+
+/* Header */
+.tl-hd { display: flex; align-items: flex-end; justify-content: space-between; }
+.tl-eyebrow {
+  font-family: var(--font-geist-mono,monospace); font-size: 10.5px;
+  letter-spacing: 0.26em; text-transform: uppercase;
+  color: var(--text-3); display: flex; align-items: center; gap: 9px; margin-bottom: 6px;
+}
+.tl-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--teal); flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(78,205,196,.55); animation: tl-pulse 2.4s ease-out infinite;
+}
+@keyframes tl-pulse {
+  0%  { box-shadow: 0 0 0 0   rgba(78,205,196,.55); }
+  70% { box-shadow: 0 0 0 9px rgba(78,205,196,0); }
+  100%{ box-shadow: 0 0 0 0   rgba(78,205,196,0); }
+}
+.tl-title {
+  font-size: 28px; font-weight: 200; letter-spacing: -0.025em;
+  color: var(--text); line-height: 1;
+}
+.tl-title em { font-style: italic; color: var(--text-2); }
+.tl-go {
+  appearance: none; cursor: pointer; flex-shrink: 0;
+  background: var(--teal); border: none; border-radius: 12px;
+  color: #0B3B38; font-size: 13.5px; font-family: inherit; font-weight: 500;
+  padding: 11px 22px; display: inline-flex; align-items: center; gap: 8px;
+  transition: background 0.15s, opacity 0.15s;
+}
+.tl-go.off { opacity: 0.42; cursor: not-allowed; }
+.tl-go:not(.off):hover { background: var(--teal-deep); }
+
+/* Lang bar */
+.tl-lang-bar {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 14px; padding: 6px 10px;
+}
+.ls-wrap { flex: 1; position: relative; }
+.ls-btn {
+  width: 100%; appearance: none; background: transparent; border: none;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 9px; transition: background 0.15s;
+}
+.ls-btn:hover { background: var(--bg); }
+.ls-cur { font-size: 14px; font-weight: 300; color: var(--text); flex: 1; text-align: left; }
+.ls-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; padding: 5px;
+  min-width: 220px; max-height: 300px; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.24);
+}
+.ls-opt {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px; border: none;
+  background: transparent; color: var(--text);
+  font-size: 13px; cursor: pointer; border-radius: 7px;
+  text-align: left; transition: background 0.1s;
+}
+.ls-opt:hover { background: var(--surface-2); }
+.ls-opt.active { background: var(--teal-soft); color: var(--teal); }
+.ls-native { flex: 1; font-weight: 300; }
+.ls-en { font-size: 11px; color: var(--text-4); font-family: var(--font-geist-mono,monospace); }
+.tl-swap {
+  appearance: none; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 9px; color: var(--text-3); cursor: pointer; flex-shrink: 0;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s, transform 0.22s;
+}
+.tl-swap:hover { background: var(--surface-2); color: var(--text); transform: rotate(180deg); }
+.tl-hint {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: var(--font-geist-mono,monospace); font-size: 10.5px; color: var(--text-4);
+  padding-left: 8px; border-left: 1px solid var(--line); margin-left: 2px; white-space: nowrap;
+}
+.tl-hint kbd {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+  padding: 2px 5px; font-size: 10px; color: var(--text-3);
+}
+
+/* Panes */
+.tl-panes {
+  display: grid; grid-template-columns: 1fr 1px 1fr;
+  flex: 1; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; overflow: hidden;
+}
+.tl-vdiv { background: var(--line); }
+.tl-pane { display: flex; flex-direction: column; min-height: 0; }
+.tl-pane-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px 10px; flex-shrink: 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.tl-lbl {
+  font-family: var(--font-geist-mono,monospace); font-size: 10px;
+  letter-spacing: 0.26em; text-transform: uppercase; color: var(--text-4);
+}
+.tl-wc {
+  font-family: var(--font-geist-mono,monospace); font-size: 11px;
+  color: var(--text-4); font-variant-numeric: tabular-nums;
+}
+.tl-wc.red { color: var(--red); }
+.tl-wc.amber { color: var(--amber,#F59E0B); }
+.tl-wc-of { opacity: 0.45; }
+.tl-icon {
+  appearance: none; background: transparent; border: 1px solid transparent;
+  border-radius: 6px; color: var(--text-4); cursor: pointer;
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.tl-icon:hover { background: var(--surface-2); color: var(--text-2); border-color: var(--line); }
+.tl-action {
+  appearance: none; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 7px; cursor: pointer; color: var(--text-3);
+  font-size: 11.5px; font-family: inherit;
+  padding: 4px 9px; display: inline-flex; align-items: center; gap: 4px;
+  transition: all 0.15s;
+}
+.tl-action:not(:disabled):hover { background: var(--surface-2); color: var(--text); }
+.tl-action:disabled { opacity: 0.3; cursor: not-allowed; }
+.tl-action.active { background: var(--teal-soft); color: var(--teal); border-color: rgba(78,205,196,0.4); }
+
+/* Progress bar */
+.tl-prog-wrap {
+  height: 2px; background: var(--line-soft); flex-shrink: 0;
+  position: relative; overflow: hidden;
+}
+.tl-prog {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--teal); transition: width 0.3s;
+  border-radius: 0 2px 2px 0;
+}
+.tl-prog.red { background: var(--red); }
+
+/* Textarea */
+.tl-ta {
+  flex: 1; resize: none; border: none; outline: none; background: transparent;
+  padding: 16px 20px; font-family: inherit; font-size: 14px;
+  color: var(--text); line-height: 1.78; font-weight: 300; min-height: 0;
+}
+.tl-ta::placeholder { color: var(--text-4); line-height: 1.78; white-space: pre; }
+.tl-warn {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  font-size: 11.5px; color: var(--red); padding: 6px 20px 12px;
+  font-family: var(--font-geist-mono,monospace);
+}
+
+/* Output */
+.tl-out { flex: 1; overflow: auto; padding: 18px 20px; min-height: 0; }
+.tl-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; height: 100%; gap: 12px; color: var(--text-4); text-align: center;
+}
+.tl-empty span { font-size: 13.5px; }
+.tl-empty-sub {
+  font-size: 11.5px !important; font-family: var(--font-geist-mono,monospace);
+  letter-spacing: 0.04em; opacity: 0.65; max-width: 34ch;
+  line-height: 1.6; margin-top: 2px;
+}
+.tl-skels { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.tl-sk {
+  height: 14px; border-radius: 6px;
+  background: linear-gradient(90deg,var(--skeleton-1) 0%,var(--skeleton-2) 40%,var(--skeleton-1) 80%);
+  background-size: 240% 100%; animation: shimmer 1.6s linear infinite;
+}
+.tl-err {
+  display: flex; align-items: flex-start; gap: 10px;
+  color: var(--red); font-size: 13px; line-height: 1.55;
+  background: rgba(229,86,75,0.07); border: 1px solid rgba(229,86,75,0.18);
+  border-radius: 10px; padding: 14px 16px;
+}
+.tl-result {
+  font-size: 14px; line-height: 1.8; color: var(--text);
+  font-weight: 300; white-space: pre-wrap; margin: 0;
+}
+
+/* Spinner */
+.tl-spin {
+  display: inline-block; width: 13px; height: 13px; flex-shrink: 0;
+  border: 2px solid rgba(11,59,56,0.25); border-top-color: #0B3B38;
+  border-radius: 50%; animation: tl-rotate 0.7s linear infinite;
+}
+@keyframes tl-rotate { to { transform: rotate(360deg); } }
+
+@media (max-width: 820px) {
+  .tl-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1px 1fr; }
+  .tl-vdiv  { width: 100%; }
+  .tl-hint  { display: none; }
+  .tl-title { font-size: 22px; }
+}
+`;
