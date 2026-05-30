@@ -76,9 +76,11 @@ export async function streamChat(
     } as any);
 
     const history = messages.slice(0, -1).map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
+      role: m.role === 'user' ? 'user' as const : 'model' as const,
       parts: [{ text: m.text }],
     }));
+    // Gemini requires history to start with 'user' — drop any leading model turns (e.g. greeting messages)
+    while (history.length > 0 && history[0].role === 'model') history.shift();
     const lastUserMsg = messages[messages.length - 1].text;
 
     const chat = model.startChat({
